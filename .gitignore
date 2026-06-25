@@ -1,0 +1,25 @@
+# Claude Code
+.claude/settings.local.json
+
+# Generated artifacts (CSVs, validation reports, MIQ seed SQL, cert)
+out/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

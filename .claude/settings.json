@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard *)",
+      "Bash(git branch -D *)",
+      "Bash(git clean -f *)",
+      "Bash(git checkout -- *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~/*)",
+      "Edit(SPEC.md)",
+      "Write(SPEC.md)"
+    ]
+  },
+  "env": {
+    "PATH": "/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | grep -E '\\.py$' | { read -r f; [ -n \"$f\" ] && python3 -m py_compile \"$f\"; } 2>&1 || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -n '{hookSpecificOutput: {hookEventName: \"UserPromptSubmit\", additionalContext: \"Reminder for this turn: if you hit something non-obvious (data mapping, API contract surprise, join failure, residency friction), append it to GOTCHAS.md before moving on. The PoC primary deliverable is GOTCHAS.md, not the code. See CLAUDE.md non-negotiables.\"}}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "F=\"$CLAUDE_PROJECT_DIR/GOTCHAS.md\"; if [ -f \"$F\" ]; then echo \"## Recent gotchas:\"; tail -30 \"$F\"; else echo \"GOTCHAS.md not yet created \\u2014 capture the first non-obvious thing you hit this session.\"; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "focus-finops": {
+      "type": "http",
+      "url": "https://focus.finops.org/wp-json/focus/v1/mcp"
+    }
+  }
+}

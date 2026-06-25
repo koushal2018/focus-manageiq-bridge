@@ -1,0 +1,253 @@
+"""Shared fixtures for the messy-data generators.
+
+The single source of truth for the *logical* workloads we simulate lives here.
+Each cloud generator (aws_cur, azure_cost_export, oci_usage) and the
+MIQ VMDB seed all pull from WORKLOADS so they describe the SAME real-world
+systems --- but each emits identifiers in its own native shape. That asymmetry
+is what makes the FOCUS<->ManageIQ join hard and is the point of the PoC.
+
+See SPEC.md s3.1 for the mandated messiness recipes and GOTCHAS.md J-1 for
+the join-key gotcha that motivates the cross-provider id divergence.
+"""
+from __future__ import annotations
+
+import dataclasses
+import datetime as dt
+import random
+from typing import Iterable
+
+# Obvious-fake constants so no one mistakes any of this for real ENBD data.
+# Per SPEC s3.1: synthetic data MUST be visibly synthetic.
+DEMO_PREFIX = "DEMO-"
+FAKE_AWS_ACCOUNT_ID = "999900001111"          # 12 digits, not a real account
+FAKE_AZURE_SUBSCRIPTION = "00000000-0000-4000-8000-deadbeefcafe"  # not a real GUID
+FAKE_OCI_TENANCY = "ocid1.tenancy.oc1..demoXXXfakeXXX"
+
+# Bank context: AED is the home currency, USD is the cloud invoice currency
+# for AWS/Azure/OCI. FOCUS BillingCurrency vs PricingCurrency distinction is
+# exercised through this mix --- SPEC s3.1 explicitly mandates it.
+BILLING_CURRENCY = "AED"
+PRICING_CURRENCY = "USD"
+USD_TO_AED = 3.6725  # pegged; obvious and constant, no live FX lookups
+
+# Deterministic randomness only; no live randomness so generator output is
+# reproducible (and so a future re-run produces the same join gotchas).
+RNG_SEED = 20260625
+
+# Bedrock model line items: SPEC s3.1 mandates these for requirement #1.
+BEDROCK_MODELS = [
+    # (model_id, input_token_price_per_1k_USD, output_token_price_per_1k_USD)
+    ("anthropic.claude-3-5-sonnet-20241022-v2:0", 0.003, 0.015),
+    ("anthropic.claude-3-haiku-20240307-v1:0",    0.00025, 0.00125),
+    ("amazon.nova-pro-v1:0",                       0.0008, 0.0032),
+]
+
+
+@dataclasses.dataclass(frozen=True)
+class Workload:
+    """A single logical workload that exists across one or more providers.
+
+    The same Workload may be visible to multiple clouds (e.g. the on-prem
+    equivalent rehosted on AWS), but with DIFFERENT identifiers per provider.
+    On-prem-only workloads have empty cloud_ids --- they are the SPEC s3.1
+    'on-prem rows with no cloud-style ResourceId' messiness.
+
+    Field conventions:
+      - canonical_name: the human-meaningful name. We deliberately let
+        cloud-side names DRIFT from this --- see name_in_provider().
+      - aws_instance_id: i-... if present on AWS, else None
+      - azure_resource_id: full ARM path if present on Azure, else None
+        (because Azure cost data uses ARM paths --- gotcha J-1)
+      - oci_resource_id: OCID if present on OCI, else None
+      - cpu_cores / memory_mb: real shape on the on-prem appliance side
+      - cpu_pct / mem_pct: utilization to seed metric_rollups
+      - tags: free-form workload-level tags; cloud-side may drop or rename.
+    """
+    canonical_name: str
+    business_unit: str
+    aws_instance_id: str | None
+    azure_resource_id: str | None
+    oci_resource_id: str | None
+    cpu_cores: int
+    memory_mb: int
+    cpu_pct: float
+    mem_pct: float
+    tags: dict[str, str]
+
+    def is_on_prem_only(self) -> bool:
+        return (
+            self.aws_instance_id is None
+            and self.azure_resource_id is None
+            and self.oci_resource_id is None
+        )
+
+    def name_in_provider(self, provider: str) -> str:
+        """Cloud providers and on-prem CMDBs name the same workload differently.
+
+        SPEC s3.1: 'Resource naming that differs across providers for the
+        same logical workload'. This function encodes that drift so the
+        generators emit conflicting names that the join must reconcile.
+        """
+        base = self.canonical_name
+        if provider == "aws":
+            # AWS Console-style: lowercased, hyphen-separated
+            return base.lower().replace(" ", "-")
+        if provider == "azure":
+            # Azure UI-style: PascalCase, no spaces
+            return "".join(p.capitalize() for p in base.split())
+        if provider == "oci":
+            # OCI: as-typed but with a -oci suffix
+            return f"{base}-oci"
+        if provider == "miq":
+            # MIQ inventory: the canonical name (CMDB is source of truth on-prem)
+            return base
+        raise ValueError(f"unknown provider {provider!r}")
+
+
+# Hand-built workload list. Mix of:
+#   - workloads on AWS only (clear cloud-only join cases)
+#   - workloads on Azure only (Azure cost-export join, gotcha J-1)
+#   - workloads on both AWS and Azure (cross-cloud duplicate-naming risk)
+#   - workloads on OCI
+#   - workloads on-prem only (the SPEC s3.1 'no cloud ResourceId' case)
+# All identifiers are DEMO-prefixed or obviously fake.
+WORKLOADS: list[Workload] = [
+    # 1. AWS-only: payments gateway, the "obvious" case
+    Workload(
+        canonical_name="Payments Gateway",
+        business_unit="retail-banking",
+        aws_instance_id="i-0demo000000payments",
+        azure_resource_id=None,
+        oci_resource_id=None,
+        cpu_cores=4,
+        memory_mb=16384,
+        cpu_pct=62.0,
+        mem_pct=71.0,
+        tags={"app": "payments-gw", "env": "prod", "cost-center": "CC-RB-101"},
+    ),
+    # 2. Azure-only: fraud detection. Forces Azure ARM-path join.
+    Workload(
+        canonical_name="Fraud Detection",
+        business_unit="risk",
+        aws_instance_id=None,
+        azure_resource_id=(
+            f"/subscriptions/{FAKE_AZURE_SUBSCRIPTION}"
+            "/resourceGroups/rg-risk-prod"
+            "/providers/Microsoft.Compute/virtualMachines/FraudDetection"
+        ),
+        oci_resource_id=None,
+        cpu_cores=8,
+        memory_mb=32768,
+        cpu_pct=44.5,
+        mem_pct=58.0,
+        tags={"app": "fraud-det", "env": "prod", "cost-center": "CC-RSK-220"},
+    ),
+    # 3. Both AWS and Azure: KYC service in active-active multi-cloud.
+    # The same logical workload has DIFFERENT IDs on each cloud and the
+    # join must reconcile both back to one CMDB record.
+    Workload(
+        canonical_name="KYC Service",
+        business_unit="compliance",
+        aws_instance_id="i-0demo000000kycaaaa",
+        azure_resource_id=(
+            f"/subscriptions/{FAKE_AZURE_SUBSCRIPTION}"
+            "/resourceGroups/rg-compliance"
+            "/providers/Microsoft.Compute/virtualMachines/KycService"
+        ),
+        oci_resource_id=None,
+        cpu_cores=4,
+        memory_mb=8192,
+        cpu_pct=33.0,
+        mem_pct=41.5,
+        tags={"app": "kyc", "env": "prod"},  # cost-center deliberately missing
+    ),
+    # 4. OCI-only: data warehouse moving off Oracle. Tests OCID join.
+    Workload(
+        canonical_name="Customer DW",
+        business_unit="analytics",
+        aws_instance_id=None,
+        azure_resource_id=None,
+        oci_resource_id="ocid1.instance.oc1.me-dubai-1.demo000000custdw",
+        cpu_cores=16,
+        memory_mb=131072,
+        cpu_pct=18.2,
+        mem_pct=82.5,
+        tags={"app": "customer-dw", "env": "prod", "cost-center": "CC-ANA-700"},
+    ),
+    # 5. On-prem only: legacy core banking. NO cloud ResourceId. The case
+    # SPEC s3.1 specifically calls out for the #3 join problem.
+    Workload(
+        canonical_name="Core Banking Legacy",
+        business_unit="core-banking",
+        aws_instance_id=None,
+        azure_resource_id=None,
+        oci_resource_id=None,
+        cpu_cores=32,
+        memory_mb=262144,
+        cpu_pct=78.5,
+        mem_pct=88.0,
+        tags={"app": "core-bank-legacy", "env": "prod"},
+    ),
+    # 6. On-prem only: legacy mainframe gateway. Underutilized on purpose.
+    Workload(
+        canonical_name="Mainframe Bridge",
+        business_unit="core-banking",
+        aws_instance_id=None,
+        azure_resource_id=None,
+        oci_resource_id=None,
+        cpu_cores=8,
+        memory_mb=32768,
+        cpu_pct=8.0,    # low util --- rightsizing candidate
+        mem_pct=12.0,
+        tags={"app": "mainframe-bridge", "env": "prod"},
+    ),
+    # 7. AWS rehost of an on-prem workload that ALSO still has an on-prem row.
+    # Tests the case where two rows describe the same workload mid-migration.
+    Workload(
+        canonical_name="Treasury Recon",
+        business_unit="treasury",
+        aws_instance_id="i-0demo00000treasury",
+        azure_resource_id=None,
+        oci_resource_id=None,
+        cpu_cores=2,
+        memory_mb=8192,
+        cpu_pct=22.0,
+        mem_pct=35.0,
+        tags={"app": "treasury-recon", "env": "prod", "cost-center": "CC-TR-330"},
+    ),
+]
+
+
+# AWS regions we'll use
+AWS_REGIONS = ["me-central-1", "eu-west-1"]
+AZURE_REGIONS = ["uaenorth", "westeurope"]
+OCI_REGIONS = ["me-dubai-1", "eu-frankfurt-1"]
+
+
+def usd_to_aed(usd: float) -> float:
+    """Pinned FX. Real ENBD will need a live FX feed --- a gotcha for later."""
+    return round(usd * USD_TO_AED, 6)
+
+
+def make_rng() -> random.Random:
+    """Deterministic RNG; same seed every run --- gotchas reproduce."""
+    return random.Random(RNG_SEED)
+
+
+def hourly_periods(days: int, start: dt.datetime | None = None) -> Iterable[tuple[dt.datetime, dt.datetime]]:
+    """Yield (start, end) tuples for `days` of hourly buckets.
+
+    Fixed start (not Now) so output is reproducible.
+    """
+    if start is None:
+        start = dt.datetime(2026, 6, 1, 0, 0, 0, tzinfo=dt.timezone.utc)
+    for h in range(days * 24):
+        s = start + dt.timedelta(hours=h)
+        yield s, s + dt.timedelta(hours=1)
+
+
+def out_dir() -> str:
+    """Where generated CSVs land. Project-relative."""
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(os.path.dirname(here), "out", "generators")
