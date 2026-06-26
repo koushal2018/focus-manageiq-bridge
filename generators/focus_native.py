@@ -93,35 +93,37 @@ def generate_aws(days: int = 3) -> tuple[list[dict], list[str]]:
             rows.append(r)
 
     # Bedrock per-model AI rows (requirement #1) — native FOCUS shape.
-    bd = dt.date(2026, 6, 1)
-    bps, bpe, cps, cpe = _period(bd)
-    for model_id, in_p, out_p in common.BEDROCK_MODELS:
-        in_tok = rng.randint(50_000, 200_000)
-        out_tok = rng.randint(10_000, 50_000)
-        for kind, tok, price in (("Input", in_tok, in_p), ("Output", out_tok, out_p)):
-            r = _base_row()
-            cost = round((tok / 1000.0) * price, 6)
-            r.update({
-                "BillingAccountId": common.FAKE_AWS_ACCOUNT_ID,
-                "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
-                "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
-                "ChargeCategory": "Usage",
-                "ChargeDescription": f"Bedrock {model_id} {kind} tokens",
-                "BilledCost": cost, "EffectiveCost": cost, "ListCost": cost, "ContractedCost": cost,
-                "BillingCurrency": "USD", "PricingCurrency": "USD",
-                "ServiceProviderName": "AWS", "InvoiceIssuerName": "Amazon Web Services, Inc.",
-                "ServiceCategory": "AI and Machine Learning", "ServiceName": "Amazon Bedrock",
-                "SkuMeter": f"{model_id}::{kind}Tokens",   # model id preserved for the AI view
-                "SkuId": f"{model_id}-{kind.lower()}",
-                "ResourceId": f"arn:aws:bedrock:us-east-1::foundation-model/{model_id}",
-                "ResourceName": model_id, "ResourceType": "Foundation Model",
-                "RegionId": "us-east-1", "RegionName": "US East (N. Virginia)",
-                "ConsumedQuantity": tok, "ConsumedUnit": "Tokens",
-                "PricingQuantity": tok, "PricingUnit": "Tokens",
-                "Tags": json.dumps({"app": "ai-assist", "env": "prod"}, separators=(",", ":")),
-                "x_Discounts": "0", "x_Operation": "InvokeModel", "x_ServiceCode": "AmazonBedrock",
-            })
-            rows.append(r)
+    # Spread daily AI usage across the window so AI cost scales with `days`.
+    for d in range(days):
+        bd = dt.date(2026, 6, 1) + dt.timedelta(days=d)
+        bps, bpe, cps, cpe = _period(bd)
+        for model_id, in_p, out_p in common.BEDROCK_MODELS:
+            in_tok = rng.randint(50_000, 200_000)
+            out_tok = rng.randint(10_000, 50_000)
+            for kind, tok, price in (("Input", in_tok, in_p), ("Output", out_tok, out_p)):
+                r = _base_row()
+                cost = round((tok / 1000.0) * price, 6)
+                r.update({
+                    "BillingAccountId": common.FAKE_AWS_ACCOUNT_ID,
+                    "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
+                    "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
+                    "ChargeCategory": "Usage",
+                    "ChargeDescription": f"Bedrock {model_id} {kind} tokens",
+                    "BilledCost": cost, "EffectiveCost": cost, "ListCost": cost, "ContractedCost": cost,
+                    "BillingCurrency": "USD", "PricingCurrency": "USD",
+                    "ServiceProviderName": "AWS", "InvoiceIssuerName": "Amazon Web Services, Inc.",
+                    "ServiceCategory": "AI and Machine Learning", "ServiceName": "Amazon Bedrock",
+                    "SkuMeter": f"{model_id}::{kind}Tokens",   # model id preserved for the AI view
+                    "SkuId": f"{model_id}-{kind.lower()}",
+                    "ResourceId": f"arn:aws:bedrock:us-east-1::foundation-model/{model_id}",
+                    "ResourceName": model_id, "ResourceType": "Foundation Model",
+                    "RegionId": "us-east-1", "RegionName": "US East (N. Virginia)",
+                    "ConsumedQuantity": tok, "ConsumedUnit": "Tokens",
+                    "PricingQuantity": tok, "PricingUnit": "Tokens",
+                    "Tags": json.dumps({"app": "ai-assist", "env": "prod"}, separators=(",", ":")),
+                    "x_Discounts": "0", "x_Operation": "InvokeModel", "x_ServiceCode": "AmazonBedrock",
+                })
+                rows.append(r)
 
     # Messiness: a duplicate row + a null-ServiceCategory row (the normalizer/
     # adapter must catch the latter — FOCUS mandates ServiceCategory non-null).
@@ -184,30 +186,34 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
             })
             rows.append(r)
 
-    # Azure OpenAI AI row
-    bps, bpe, cps, cpe = _period(dt.date(2026, 6, 2))
-    r = _base_row()
-    r.update({
-        "BillingAccountId": common.FAKE_AZURE_SUBSCRIPTION,
-        "SubAccountId": "rg-ai-prod",
-        "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
-        "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
-        "ChargeCategory": "Usage", "ChargeDescription": "Azure OpenAI GPT-4 Turbo input tokens",
-        "BilledCost": common.usd_to_aed(0.85), "EffectiveCost": common.usd_to_aed(0.85),
-        "ListCost": 0.85, "ContractedCost": common.usd_to_aed(0.85),
-        "BillingCurrency": "AED", "PricingCurrency": "USD",
-        "ServiceProviderName": "Microsoft", "InvoiceIssuerName": "Microsoft",
-        "ServiceCategory": "AI and Machine Learning", "ServiceName": "Azure OpenAI Service",
-        "SkuMeter": "gpt-4-turbo::InputTokens",
-        "ResourceId": f"/subscriptions/{common.FAKE_AZURE_SUBSCRIPTION}/resourceGroups/rg-ai-prod/providers/Microsoft.CognitiveServices/accounts/demo-aoai",
-        "ResourceName": "demo-aoai", "ResourceType": "Microsoft.CognitiveServices/accounts",
-        "RegionId": "uaenorth", "RegionName": "UAE North",
-        "ConsumedQuantity": 125000, "ConsumedUnit": "Tokens",
-        "PricingQuantity": 125000, "PricingUnit": "1K Tokens",
-        "Tags": json.dumps({"app": "ai-assist", "env": "prod"}, separators=(",", ":")),
-        "x_SkuMeterId": "demo-aoai-meter", "x_ResourceGroupName": "rg-ai-prod",
-    })
-    rows.append(r)
+    # Azure OpenAI AI rows — spread across the window (parity with Bedrock).
+    for d in range(days):
+        cd = dt.date(2026, 6, 1) + dt.timedelta(days=d)
+        bps, bpe, cps, cpe = _period(cd)
+        for meter, usd in (("gpt-4-turbo::InputTokens", 0.85), ("gpt-4-turbo::OutputTokens", 1.10)):
+            usd_j = round(usd + rng.uniform(-0.2, 0.4), 6)
+            r = _base_row()
+            r.update({
+                "BillingAccountId": common.FAKE_AZURE_SUBSCRIPTION,
+                "SubAccountId": "rg-ai-prod",
+                "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
+                "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
+                "ChargeCategory": "Usage", "ChargeDescription": f"Azure OpenAI {meter}",
+                "BilledCost": common.usd_to_aed(usd_j), "EffectiveCost": common.usd_to_aed(usd_j),
+                "ListCost": usd_j, "ContractedCost": common.usd_to_aed(usd_j),
+                "BillingCurrency": "AED", "PricingCurrency": "USD",
+                "ServiceProviderName": "Microsoft", "InvoiceIssuerName": "Microsoft",
+                "ServiceCategory": "AI and Machine Learning", "ServiceName": "Azure OpenAI Service",
+                "SkuMeter": meter,
+                "ResourceId": f"/subscriptions/{common.FAKE_AZURE_SUBSCRIPTION}/resourceGroups/rg-ai-prod/providers/Microsoft.CognitiveServices/accounts/demo-aoai",
+                "ResourceName": "demo-aoai", "ResourceType": "Microsoft.CognitiveServices/accounts",
+                "RegionId": "uaenorth", "RegionName": "UAE North",
+                "ConsumedQuantity": 125000, "ConsumedUnit": "Tokens",
+                "PricingQuantity": 125000, "PricingUnit": "1K Tokens",
+                "Tags": json.dumps({"app": "ai-assist", "env": "prod"}, separators=(",", ":")),
+                "x_SkuMeterId": "demo-aoai-meter", "x_ResourceGroupName": "rg-ai-prod",
+            })
+            rows.append(r)
     return rows, cols
 
 
@@ -249,34 +255,36 @@ def generate_oci(days: int = 3) -> tuple[list[dict], list[str]]:
             })
             rows.append(r)
 
-    # OCI generative-AI rows (per-model)
-    bps, bpe, cps, cpe = _period(dt.date(2026, 6, 1))
-    for model_id, sku, price_10k, tokens in (
-        ("cohere.command-r-plus", "B99001", 0.0150, 180_000),
-        ("cohere.command-r-08-2024", "B99002", 0.0030, 120_000),
-        ("meta.llama-3.1-70b-instruct", "B99003", 0.0072, 90_000),
-    ):
-        r = _base_row()
-        cost = round((tokens / 10_000.0) * price_10k, 6)
-        r.update({
-            "BillingAccountId": common.FAKE_OCI_TENANCY, "SubAccountId": "Analytics",
-            "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
-            "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
-            "ChargeCategory": "Usage", "ChargeDescription": f"OCI Generative AI {model_id}",
-            "BilledCost": cost, "EffectiveCost": cost, "ListCost": cost, "ContractedCost": cost,
-            "BillingCurrency": "USD", "PricingCurrency": "USD",
-            "ServiceProviderName": "Oracle Cloud Infrastructure", "InvoiceIssuerName": "Oracle",
-            "ServiceCategory": "AI and Machine Learning", "ServiceName": "Generative AI",
-            "SkuId": sku, "SkuMeter": model_id,
-            "ResourceId": f"ocid1.generativeaimodel.oc1.me-dubai-1.demo{sku.lower()}",
-            "ResourceName": model_id, "ResourceType": "Generative AI Model",
-            "RegionId": "me-dubai-1", "RegionName": "UAE Central (Dubai)",
-            "ConsumedQuantity": tokens, "ConsumedUnit": "Tokens",
-            "PricingQuantity": tokens, "PricingUnit": "Tokens",
-            "Tags": json.dumps({"app": "ai-assist", "env": "prod"}, separators=(",", ":")),
-            "x_CompartmentId": "ocid1.compartment.oc1..demoanalytics",
-        })
-        rows.append(r)
+    # OCI generative-AI rows (per-model) — spread across the window.
+    for d in range(days):
+        cd = dt.date(2026, 6, 1) + dt.timedelta(days=d)
+        bps, bpe, cps, cpe = _period(cd)
+        for model_id, sku, price_10k, tokens in (
+            ("cohere.command-r-plus", "B99001", 0.0150, 180_000),
+            ("cohere.command-r-08-2024", "B99002", 0.0030, 120_000),
+            ("meta.llama-3.1-70b-instruct", "B99003", 0.0072, 90_000),
+        ):
+            r = _base_row()
+            cost = round((tokens / 10_000.0) * price_10k, 6)
+            r.update({
+                "BillingAccountId": common.FAKE_OCI_TENANCY, "SubAccountId": "Analytics",
+                "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
+                "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
+                "ChargeCategory": "Usage", "ChargeDescription": f"OCI Generative AI {model_id}",
+                "BilledCost": cost, "EffectiveCost": cost, "ListCost": cost, "ContractedCost": cost,
+                "BillingCurrency": "USD", "PricingCurrency": "USD",
+                "ServiceProviderName": "Oracle Cloud Infrastructure", "InvoiceIssuerName": "Oracle",
+                "ServiceCategory": "AI and Machine Learning", "ServiceName": "Generative AI",
+                "SkuId": sku, "SkuMeter": model_id,
+                "ResourceId": f"ocid1.generativeaimodel.oc1.me-dubai-1.demo{sku.lower()}",
+                "ResourceName": model_id, "ResourceType": "Generative AI Model",
+                "RegionId": "me-dubai-1", "RegionName": "UAE Central (Dubai)",
+                "ConsumedQuantity": tokens, "ConsumedUnit": "Tokens",
+                "PricingQuantity": tokens, "PricingUnit": "Tokens",
+                "Tags": json.dumps({"app": "ai-assist", "env": "prod"}, separators=(",", ":")),
+                "x_CompartmentId": "ocid1.compartment.oc1..demoanalytics",
+            })
+            rows.append(r)
     return rows, cols
 
 
@@ -292,9 +300,12 @@ def _write(path: str, rows: list[dict], cols: list[str]) -> str:
 
 def write_all() -> dict[str, str]:
     out = common.out_dir()
+    # Demo volume: default 30 days so the dashboard reads as credible.
+    # Override with FOCUS_GEN_DAYS (e.g. 3 for a fast hand-traceable run).
+    days = int(os.environ.get("FOCUS_GEN_DAYS", "30"))
     paths = {}
     for name, gen in (("aws", generate_aws), ("azure", generate_azure), ("oci", generate_oci)):
-        rows, cols = gen()
+        rows, cols = gen(days=days)
         paths[name] = _write(os.path.join(out, f"focus_{name}.csv"), rows, cols)
     return paths
 

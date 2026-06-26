@@ -167,6 +167,18 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 - **What:** `sql_guard` ensures read-only + allowlisted tables, but the LLM can still emit a valid query that's financially wrong (e.g. SUM across currencies — H-1, or a fan-out join that multi-counts).
 - **EBA action:** for financial figures prefer canned queries; add result-sanity checks (single currency in a SUM, row-count bounds). "Confidently wrong total" is the SPEC §0 nightmare and the guardrail does not catch it.
 
+## Demo / MVP
+
+### DM-1. Demo volume is env-tunable (FOCUS_GEN_DAYS) — default 30 days for credibility, 3 for hand-tracing
+- **What:** The native-FOCUS generators default to 30 days of data (`FOCUS_GEN_DAYS`, read in `focus_native.write_all`). 12 workloads (5 AWS / 3 Azure / 2 OCI / 3 on-prem) → ~630 FOCUS rows, ~$2,750 total, balanced AI cost across all three clouds. Set `FOCUS_GEN_DAYS=3` for a small hand-verifiable run (the original ~29-row dataset).
+- **Why it matters:** A 29-row dataset reads as a toy to a leadership audience; ~630 rows over a month with real per-model AI breakdowns and clear rightsizing candidates (Risk Analytics Batch: $576 at 11% CPU) reads as a credible cost console. But it's still synthetic and deterministic (RNG seeded) — reproducible, not real.
+- **EBA action:** Keep the demo at 30 days. Be explicit it's synthetic. For a "looks like our real bill" demo, the next step is NF-2 — run one real provider FOCUS export through the native adapter.
+
+### DM-2. AI cost rows must spread across the time window or one cloud dominates the AI view
+- **What:** Initially only AWS Bedrock rows spanned the date range; Azure OpenAI + OCI gen-AI emitted a single day each. At 30 days the AI-by-provider view showed AWS with 180 rows vs Azure 1 / OCI 3 — visually implying ENBD barely uses non-AWS AI. Fixed by spreading all three providers' AI rows across the window.
+- **Why it matters:** Requirement #1 is explicitly "AI cost across AWS / Azure / OCI." An unbalanced view undercuts the exact point being demonstrated. Now: Azure $65.73 / AWS $31.25 / OCI $11.12, each with per-model splits.
+- **EBA action:** When scaling synthetic data, scale ALL providers symmetrically or the comparison view lies by omission.
+
 ## Customer comprehension
 
 ### CX-1. The FOCUS `Allocated*` columns are NOT a "source→FOCUS mapping" surface — they describe internal cost-allocation

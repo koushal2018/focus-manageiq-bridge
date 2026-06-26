@@ -215,6 +215,75 @@ WORKLOADS: list[Workload] = [
         mem_pct=35.0,
         tags={"app": "treasury-recon", "env": "prod", "cost-center": "CC-TR-330"},
     ),
+    # 8. AWS — trade settlement, high CPU (well-utilized, not a rightsize target)
+    Workload(
+        canonical_name="Trade Settlement",
+        business_unit="capital-markets",
+        aws_instance_id="i-0demo0000settlemnt",
+        azure_resource_id=None,
+        oci_resource_id=None,
+        cpu_cores=8,
+        memory_mb=32768,
+        cpu_pct=74.0,
+        mem_pct=66.0,
+        tags={"app": "trade-settle", "env": "prod", "cost-center": "CC-CM-410"},
+    ),
+    # 9. AWS — analytics batch, very low CPU + high cost (rightsize candidate)
+    Workload(
+        canonical_name="Risk Analytics Batch",
+        business_unit="risk",
+        aws_instance_id="i-0demo00000riskbtch",
+        azure_resource_id=None,
+        oci_resource_id=None,
+        cpu_cores=16,
+        memory_mb=131072,
+        cpu_pct=11.0,
+        mem_pct=29.0,
+        tags={"app": "risk-batch", "env": "prod", "cost-center": "CC-RSK-225"},
+    ),
+    # 10. Azure — mobile banking API, busy
+    Workload(
+        canonical_name="Mobile Banking API",
+        business_unit="digital",
+        aws_instance_id=None,
+        azure_resource_id=(
+            f"/subscriptions/{FAKE_AZURE_SUBSCRIPTION}"
+            "/resourceGroups/rg-digital-prod"
+            "/providers/Microsoft.Compute/virtualMachines/MobileBankingApi"
+        ),
+        oci_resource_id=None,
+        cpu_cores=8,
+        memory_mb=16384,
+        cpu_pct=58.0,
+        mem_pct=49.0,
+        tags={"app": "mobile-api", "env": "prod", "cost-center": "CC-DIG-510"},
+    ),
+    # 11. OCI — regulatory reporting DB, memory-bound
+    Workload(
+        canonical_name="Regulatory Reporting DB",
+        business_unit="compliance",
+        aws_instance_id=None,
+        azure_resource_id=None,
+        oci_resource_id="ocid1.instance.oc1.me-dubai-1.demo0000regreport",
+        cpu_cores=8,
+        memory_mb=65536,
+        cpu_pct=24.0,
+        mem_pct=79.0,
+        tags={"app": "reg-report", "env": "prod", "cost-center": "CC-COMP-230"},
+    ),
+    # 12. On-prem only — cheque clearing legacy (rightsize/migration candidate)
+    Workload(
+        canonical_name="Cheque Clearing Legacy",
+        business_unit="operations",
+        aws_instance_id=None,
+        azure_resource_id=None,
+        oci_resource_id=None,
+        cpu_cores=12,
+        memory_mb=49152,
+        cpu_pct=14.0,
+        mem_pct=33.0,
+        tags={"app": "cheque-clearing", "env": "prod"},
+    ),
 ]
 
 
