@@ -6,6 +6,34 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 
 ---
 
+## 🚨 LANDMINE — read first
+
+### LM-1. The ManageIQ Quinteros appliance eats memory until the host OOM-kills *everything else*
+- **What:** Running `manageiq_appliance` (the official `manageiq/manageiq:quinteros-1` Docker image) on the dev EC2 instance consumed **~8.5 GB of 16 GB RAM within 10 minutes of startup**, with load average climbing past 9. The host's other workloads (VS Code remote server, this Claude Code session) got OOM-killed. The VS Code TUI surfaced this as `The window terminated unexpectedly (reason: 'crashed', code: '5')` — a misleading message that looks like a frontend bug.
+- **Why it matters:** Three layered traps:
+  1. **The crash signature is uninformative.** Nothing in VS Code's error says "OOM" or "ManageIQ took all your RAM." A team member will blame VS Code, the IDE, or the EC2 instance — not the container they started 10 minutes ago.
+  2. **ManageIQ doesn't self-limit.** The image runs the full appliance stack — Postgres, Puma (Rails), evmserverd, multiple Ruby workers, message bus, automation engine — with no memory cap. It will use everything the host gives it.
+  3. **`docker restart` on the same image will reproduce the crash.** The container's default restart policy is `unless-stopped`; an `Out of Memory` kill from the kernel causes the daemon to restart it, which starts the OOM cycle again.
+- **EBA action:**
+  1. **Always run the appliance with `--memory=6g --memory-swap=6g`** (or smaller — try 4g first). The ENBD team's existing appliance presumably has a larger host; on a typical EC2 dev box this is non-negotiable.
+  2. **Set the container restart policy to `no`**: `docker update --restart=no manageiq_appliance` after the first run. Without this, an OOM-kill triggers an immediate restart loop.
+  3. **Plan compute capacity before the EBA sprint.** A laptop/dev VM at 16 GB cannot host the appliance AND a Postgres container AND the web service AND the Bedrock service together. Minimum realistic memory for the full PoC stack: 24–32 GB, or split the appliance onto its own host.
+  4. **If the IDE crashes mid-build with `code: '5'`** — first thing to check is `dmesg | grep -i oom` on the host, not the IDE logs.
+
+### LM-2. ManageIQ container's restart-loop survives `docker stop` and `systemctl disable`
+- **What:** After the OOM-crash, the container kept restarting itself. `systemctl disable docker` did not stick across socket-activation — Docker's `docker.socket` unit re-activated the daemon on first client connection. Only `systemctl mask docker.service docker.socket containerd.service` made it permanently stop, and only after `docker rm` removed the container (so the restart policy had no target).
+- **Why it matters:** The instinct ("just stop Docker") is insufficient when the daemon is socket-activated *and* the container restart policy is aggressive. A half-disabled Docker silently revives the appliance the next time anything touches `/var/run/docker.sock`.
+- **EBA action — full disable sequence:**
+  ```bash
+  docker update --restart=no manageiq_appliance        # break restart loop
+  docker stop manageiq_appliance                       # stop
+  docker rm   manageiq_appliance                       # remove (no target to restart)
+  sudo systemctl mask docker.service docker.socket containerd.service
+  ```
+  To bring it back later, **always** include a memory limit on the run command (LM-1).
+
+---
+
 ## ManageIQ appliance
 
 ### G-1. Default admin credential is `admin:smartvm`
