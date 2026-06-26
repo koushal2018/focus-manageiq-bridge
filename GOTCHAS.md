@@ -344,6 +344,14 @@ _(nothing yet — start with Azure per SPEC §2)_
 - **Why it matters:** "Works in docker-compose, CrashLoopBackOff on ROSA" with a permission error on the artifact dir is the classic symptom. The compose run uses the baked UID; OpenShift does not.
 - **EBA action:** Before pushing the image for ROSA, add `RUN chgrp -R 0 /app/out && chmod -R g+rwX /app/out` to the Dockerfile (group-0 writable). The Helm `podSecurityContext` deliberately omits `runAsUser` so OpenShift assigns its own. Verify with `oc rsh` that the app can write `/app/out`.
 
+### P-10. VS Code port-forward URLs are private to your identity by default — a shared link hits an auth wall, not your app
+- **What:** The forwarded-port URL VS Code gives you (`*.devtunnels.ms` / the `vscode.dev` proxy) is, by default, **private to your GitHub/Microsoft identity**. It's perfect for eyeballing the app yourself, but if you paste it to Harsha he gets a Microsoft/GitHub auth challenge for *your* account — not the dashboard. Looks broken to the recipient.
+- **Why it matters:** Easy to assume "I can see it, so the link works for everyone." It does not. Demo links shared this way fail silently for the recipient, who reasonably concludes the PoC is down.
+- **EBA action:** Two honest paths:
+  1. **Self-check only** — keep it private, click through yourself, then expose properly for the customer.
+  2. **Share** — right-click the port → *Port Visibility → Public*. Then anyone with the URL gets in with **no authentication** — acceptable ONLY because the data is synthetic and the `Synthetic` chip is always visible. Still a weak posture for a bank; prefer a real auth front (Caddy/nginx Basic Auth on the EC2 public hostname, or CloudFront + a Basic-Auth CloudFront Function) for anything a customer sees.
+- **Tie-in:** producing the customer-facing URL needs a credentialed AWS session for the SG/CloudFront changes (CX-4) — the workload EC2 role can't do it.
+
 ## Web layer
 
 ### W-1. Starlette 1.x flipped `Jinja2Templates.TemplateResponse` to request-first
