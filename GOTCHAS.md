@@ -167,6 +167,13 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 - **What:** `sql_guard` ensures read-only + allowlisted tables, but the LLM can still emit a valid query that's financially wrong (e.g. SUM across currencies — H-1, or a fan-out join that multi-counts).
 - **EBA action:** for financial figures prefer canned queries; add result-sanity checks (single currency in a SUM, row-count bounds). "Confidently wrong total" is the SPEC §0 nightmare and the guardrail does not catch it.
 
+## Tooling / environment
+
+### ENV-1. git push auth rides a VS Code credential socket that dies when the IDE disconnects
+- **What:** `git push` worked earlier this session, then failed with "Repository not found / Authentication failed" and `ECONNREFUSED /run/user/1000/vscode-git-*.sock`. The repo and credentials are fine — pushes were authenticating through VS Code's git credential helper (a Unix socket), and that socket vanished when the VS Code remote/IDE connection dropped (same event that disconnected the IDE MCP server).
+- **Why it matters:** "Works then silently stops mid-session" with a misleading "Repository not found" (it's really "no credential"). Commits are safe locally; only the push is blocked.
+- **EBA action:** Push from the VS Code terminal (where the helper is live) or the Source Control panel. For headless/CI, configure a real credential (PAT in a `git credential-store`, or a deploy key) rather than relying on the IDE socket.
+
 ## Demo / MVP
 
 ### DM-1. Demo volume is env-tunable (FOCUS_GEN_DAYS) — default 30 days for credibility, 3 for hand-tracing
