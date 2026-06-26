@@ -1,47 +1,38 @@
 {% extends "_base.html" %}
-{% block title %}Cloud &times; on-prem &middot; ENBD FinOps PoC{% endblock %}
+{% block title %}Cloud vs on-prem · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<h1 class="display rise">
-  Cloud and on-prem,<br>
-  <em>side by side.</em>
-</h1>
-<p class="lede rise d-1">
-  Leadership requirement&nbsp;III. The cloud half is FOCUS-native,
-  grouped by provider. The on-prem half is ManageIQ's recharge model
-  &mdash; a vCPU rate plus a memory-GB rate, persisted as if it were a
-  FOCUS row.
-</p>
+<div class="in">
+  <div class="page-eyebrow"><span class="req">REQ 03</span> · Cost comparison</div>
+  <h1 class="title">Cloud and on-prem, side by side.</h1>
+  <p class="sub">
+    Cloud half is FOCUS-native, grouped by provider. On-prem half is
+    ManageIQ's recharge model — a vCPU rate plus a memory-GB rate.
+  </p>
+</div>
 
-<div class="banner info rise d-1">
-  <span class="verdict">conditional</span>
+<div class="banner conditional in d1">
+  <span class="tag">Conditional</span>
   <div>
     FOCUS is provider-agnostic but does not <em>source</em> on-prem data.
-    The cloud half is from <code>focus_costs</code>; the on-prem half is
-    from <code>miq_onprem_cost</code>, populated by
-    <code>onprem/cost_model.py</code>. Rates are stubs &mdash; the EBA
-    team replaces them with the chargeback owner's real values.
+    Cloud from <code>focus_costs</code>; on-prem from
+    <code>miq_onprem_cost</code>, populated by <code>onprem/cost_model.py</code>.
+    Rates are stubs — the EBA team substitutes the chargeback owner's real values.
   </div>
 </div>
 
-<h2 class="section rise d-2">Cloud cost</h2>
-<div class="table-wrap rise d-2">
+<h2 class="sec in d1">Cloud cost</h2>
+<div class="tbl in d2">
 <table>
   <thead>
-    <tr>
-      <th>Provider</th>
-      <th>Source</th>
-      <th class="num">Rows</th>
-      <th class="num">Total cost</th>
-      <th>Currency</th>
-    </tr>
+    <tr><th>Provider</th><th>Source</th><th class="num">Rows</th><th class="num">Total cost</th><th>Ccy</th></tr>
   </thead>
   <tbody>
   {% for r in cloud %}
     <tr>
-      <td><strong>{{ r.service_provider_name }}</strong></td>
+      <td class="name">{{ r.service_provider_name }}</td>
       <td class="muted">{{ r.source }}</td>
-      <td class="num muted">{{ r.row_count }}</td>
+      <td class="num">{{ r.row_count }}</td>
       <td class="num">{{ '%.2f'|format(r.total_cost|float) }}</td>
       <td class="muted">{{ r.billing_currency }}</td>
     </tr>
@@ -50,34 +41,24 @@
 </table>
 </div>
 
-<h2 class="section rise d-3">On-prem recharge <span class="pill unmatched_focus_only">estimated</span></h2>
-<div class="banner warn rise d-3">
-  <span class="verdict">calc</span>
+<h2 class="sec in d3">On-prem recharge <span style="color:var(--v-partial); font-size:10px; margin-left:4px;">● ESTIMATED</span></h2>
+<div class="banner partial in d3">
+  <span class="tag">Calc</span>
   <div>
-    ENBD's existing per-resource formula: vCPU rate &plus; memory-GB rate.
-    Stub values: <code>$50.00 / core / month</code>, <code>$5.00 / GB / month</code>.
-    Set via <code>ONPREM_RATE_*</code> env vars. Replace with the
+    Per-resource formula: <code>$50.00/core/mo</code> + <code>$5.00/GB/mo</code>
+    (stub rates, set via <code>ONPREM_RATE_*</code>). Replace with the
     chargeback module's real rates before any leadership review.
   </div>
 </div>
-
-<div class="table-wrap rise d-3">
+<div class="tbl in d3">
 <table>
   <thead>
-    <tr>
-      <th>Workload</th>
-      <th>Business unit</th>
-      <th class="num">vCPU</th>
-      <th class="num">Memory (GB)</th>
-      <th class="num">CPU %</th>
-      <th class="num">Mem %</th>
-      <th class="num">Monthly USD</th>
-    </tr>
+    <tr><th>Workload</th><th>Business unit</th><th class="num">vCPU</th><th class="num">Mem GB</th><th class="num">CPU %</th><th class="num">Mem %</th><th class="num">Monthly USD</th></tr>
   </thead>
   <tbody>
   {% for r in on_prem %}
     <tr>
-      <td><strong>{{ r.miq_vm_name }}</strong></td>
+      <td class="name">{{ r.miq_vm_name }}</td>
       <td class="muted">{{ r.business_unit }}</td>
       <td class="num">{{ r.cpu_cores }}</td>
       <td class="num">{{ r.memory_gb }}</td>
@@ -86,11 +67,10 @@
       <td class="num">{{ '%.2f'|format(r.monthly_cost_usd|float) }}</td>
     </tr>
   {% endfor %}
-  <tr>
-    <td colspan="6"><strong>Total on-prem (monthly)</strong></td>
-    <td class="num"><strong>{{ '%.2f'|format(on_prem_total) }}</strong></td>
-  </tr>
   </tbody>
+  <tfoot>
+    <tr><td colspan="6">Total on-prem · monthly</td><td class="num">{{ '%.2f'|format(on_prem_total) }}</td></tr>
+  </tfoot>
 </table>
 </div>
 

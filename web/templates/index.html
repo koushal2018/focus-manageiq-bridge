@@ -1,129 +1,90 @@
 {% extends "_base.html" %}
-{% block title %}Overview &middot; ENBD FinOps PoC{% endblock %}
+{% block title %}Overview · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<h1 class="display rise">
-  Four requirements,<br>
-  <em>four honest verdicts.</em>
-</h1>
-<p class="lede rise d-1">
-  A multi-cloud FinOps surface for Emirates NBD. Cost data normalized to
-  FOCUS&nbsp;v1.3, joined to ManageIQ inventory, with each view stating
-  <em>where its data comes from</em> and what the spec can and cannot
-  answer.
-</p>
+<div class="in">
+  <div class="page-eyebrow">FOCUS v1.3 × ManageIQ</div>
+  <h1 class="title">Four requirements, four verdicts.</h1>
+  <p class="sub">
+    Multi-cloud cost normalized to FOCUS, joined to ManageIQ inventory and
+    utilization. Each view states where its data comes from and what the
+    spec can and cannot answer.
+  </p>
+</div>
 
-<h2 class="section rise d-2">The verdict ribbon</h2>
-<section class="ribbon rise d-3" aria-label="Leadership requirements">
-  <div class="ribbon-arc" aria-hidden="true">
-    <svg viewBox="0 0 1200 320" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="auroraArc" x1="0" y1="0.5" x2="1" y2="0.5">
-          <stop offset="0%"   stop-color="#4be8a8"/>
-          <stop offset="33%"  stop-color="#4ec0ff"/>
-          <stop offset="66%"  stop-color="#a36bff"/>
-          <stop offset="100%" stop-color="#ff7eb6"/>
-        </linearGradient>
-      </defs>
-      <!-- Soft halo first, then a thinner arc on top -->
-      <path class="arc-path glow" stroke="url(#auroraArc)"
-            d="M -50 220 Q 200 50, 600 160 T 1250 100"/>
-      <path class="arc-path" stroke="url(#auroraArc)"
-            d="M -50 220 Q 200 50, 600 160 T 1250 100"/>
-    </svg>
+<h2 class="sec in d1">Verdict ledger</h2>
+<div class="ledger in d1">
+  <a class="ledger-row" href="/views/ai" style="--row-tone: var(--v-native)">
+    <span class="idx">01</span>
+    <div>
+      <div class="name">AI cost by cloud &amp; model</div>
+      <div class="desc">Bedrock, Azure OpenAI, OCI generative-AI — per provider, per model, with token splits.</div>
+    </div>
+    <span class="verdict v-native"><span class="dot"></span> FOCUS native</span>
+    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
+  </a>
+  <a class="ledger-row" href="/views/utilization" style="--row-tone: var(--v-partial)">
+    <span class="idx">02</span>
+    <div>
+      <div class="name">Resource utilization &amp; cost</div>
+      <div class="desc">CPU and memory % per workload, joined to cloud cost — the rightsizing surface.</div>
+    </div>
+    <span class="verdict v-partial"><span class="dot"></span> Partial · not in FOCUS</span>
+    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
+  </a>
+  <a class="ledger-row" href="/views/cloud-vs-onprem" style="--row-tone: var(--v-conditional)">
+    <span class="idx">03</span>
+    <div>
+      <div class="name">Cloud vs on-prem cost</div>
+      <div class="desc">Cloud half FOCUS-native; on-prem half from ManageIQ's recharge model.</div>
+    </div>
+    <span class="verdict v-conditional"><span class="dot"></span> Conditional</span>
+    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
+  </a>
+  <a class="ledger-row" href="/views/carbon" style="--row-tone: var(--v-out)">
+    <span class="idx">04</span>
+    <div>
+      <div class="name">Carbon footprint</div>
+      <div class="desc">No carbon column in FOCUS through v1.4 — a roadmap to four real feeds, not a number.</div>
+    </div>
+    <span class="verdict v-out"><span class="dot"></span> Out of FOCUS</span>
+    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
+  </a>
+</div>
+
+<h2 class="sec in d2">Pipeline snapshot</h2>
+<div class="stat-strip in d2">
+  <div class="stat">
+    <div class="k">FOCUS rows</div>
+    <div class="v">{{ stats.focus_rows }}</div>
+    <div class="meta">AWS · Azure · OCI</div>
   </div>
-
-  <div class="ribbon-nodes">
-    <a class="node" data-tone="good" href="/views/ai">
-      <span class="roman">I</span>
-      <h3>AI cost by cloud &amp; model</h3>
-      <span class="desc">
-        Per-model totals for Bedrock, Azure OpenAI, OCI generative-AI &mdash;
-        with input and output token splits.
-      </span>
-      <span class="verdict">FOCUS native</span>
-    </a>
-
-    <a class="node" data-tone="warn" href="/views/utilization">
-      <span class="roman">II</span>
-      <h3>Resource utilization &amp; cost</h3>
-      <span class="desc">
-        Average CPU and memory %, per workload, joined to its cloud cost
-        &mdash; the rightsizing surface.
-      </span>
-      <span class="verdict">Partial &mdash; util not in FOCUS</span>
-    </a>
-
-    <a class="node" data-tone="info" href="/views/cloud-vs-onprem">
-      <span class="roman">III</span>
-      <h3>Cloud vs on&#8209;prem cost</h3>
-      <span class="desc">
-        Cloud half FOCUS-native; on-prem half from ManageIQ's recharge
-        model. The two halves live side by side.
-      </span>
-      <span class="verdict">Conditional</span>
-    </a>
-
-    <a class="node" data-tone="bad" href="/views/carbon">
-      <span class="roman">IV</span>
-      <h3>Carbon footprint</h3>
-      <span class="desc">
-        FOCUS has no carbon column through v1.4. We hand back a roadmap
-        to the four real data streams &mdash; not a number we made up.
-      </span>
-      <span class="verdict">Out of FOCUS</span>
-    </a>
+  <div class="stat">
+    <div class="k">Join map</div>
+    <div class="v">{{ stats.join_rows }}</div>
+    <div class="meta">resolved + failure modes</div>
   </div>
-</section>
-
-<h2 class="section rise d-3">Pipeline snapshot</h2>
-<div class="stat-grid">
-  <div class="panel stat rise d-3">
-    <span class="label">FOCUS rows</span>
-    <span class="value">{{ stats.focus_rows }}</span>
-    <span class="note">
-      Cost &amp; usage rows normalized from AWS CUR, Azure cost export,
-      and OCI usage reports.
-    </span>
+  <div class="stat">
+    <div class="k">Utilization</div>
+    <div class="v">{{ stats.util_rows }}</div>
+    <div class="meta">hourly rollups</div>
   </div>
-  <div class="panel stat rise d-4">
-    <span class="label">Join map</span>
-    <span class="value">{{ stats.join_rows }}</span>
-    <span class="note">
-      Resolved FOCUS &harr; ManageIQ identity rows, including every
-      failure mode the join can produce.
-    </span>
-  </div>
-  <div class="panel stat rise d-5">
-    <span class="label">Utilization</span>
-    <span class="value">{{ stats.util_rows }}</span>
-    <span class="note">
-      Hourly CPU and memory samples per VM &mdash; sourced from ManageIQ,
-      not FOCUS.
-    </span>
-  </div>
-  <div class="panel stat rise d-6">
-    <span class="label">Source clouds</span>
-    <span class="value"><em>iii</em></span>
-    <span class="note">
-      AWS, Azure, OCI. The on-prem footprint joins through ManageIQ
-      inventory.
-    </span>
+  <div class="stat">
+    <div class="k">Clouds</div>
+    <div class="v">3</div>
+    <div class="meta">+ on-prem via MIQ</div>
   </div>
 </div>
 
-<h2 class="section rise d-4">Join distribution &mdash; the central question</h2>
-<div class="panel rise d-4" style="padding: 32px 36px;">
+<h2 class="sec in d3">Join distribution</h2>
+<div class="tbl in d3" style="padding: 22px 26px;">
 {% for s in stats.join_status %}
   {% set widest = stats.join_status|map(attribute='n')|max %}
   {% set pct = (s.n / widest * 100) if widest else 0 %}
-  <div class="join-bar">
-    <span class="name">{{ s.status }}</span>
-    <span class="track">
-      <span class="fill"
-            style="width: {{ pct }}%; animation-delay: {{ 0.6 + loop.index0 * 0.12 }}s;"></span>
-    </span>
-    <span class="count">{{ s.n }}</span>
+  <div class="jbar">
+    <span class="nm">{{ s.status }}</span>
+    <span class="tr"><span class="fl" style="width: {{ pct }}%; animation-delay: {{ 0.2 + loop.index0 * 0.08 }}s;"></span></span>
+    <span class="ct">{{ s.n }}</span>
   </div>
 {% endfor %}
 </div>

@@ -1,48 +1,39 @@
 {% extends "_base.html" %}
-{% block title %}AI cost &middot; ENBD FinOps PoC{% endblock %}
+{% block title %}AI cost · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<h1 class="display rise">
-  AI cost,<br>
-  <em>per model.</em>
-</h1>
-<p class="lede rise d-1">
-  Leadership requirement&nbsp;I. Bedrock, Azure OpenAI, and OCI
-  generative&#8209;AI all surface natively through
-  <code>ServiceCategory = 'AI and Machine Learning'</code>.
-</p>
+<div class="in">
+  <div class="page-eyebrow"><span class="req">REQ 01</span> · AI &amp; Machine Learning</div>
+  <h1 class="title">AI cost, per model.</h1>
+  <p class="sub">
+    Bedrock, Azure OpenAI, and OCI generative-AI surface natively through
+    <code style="font-family:var(--mono)">ServiceCategory = 'AI and Machine Learning'</code>.
+  </p>
+</div>
 
-<div class="banner good rise d-1">
-  <span class="verdict">native</span>
+<div class="banner native in d1">
+  <span class="tag">FOCUS native</span>
   <div>
-    The Bedrock model id is preserved by the normalizer's enrichment:
-    <code>arn:aws:bedrock:&hellip;:foundation-model/&lt;id&gt;</code> becomes
-    the <code>SkuMeter</code>. No ManageIQ join is needed here &mdash;
-    managed services have no VM equivalent in MIQ inventory, and that is
-    correct, not a bug.
+    The model id is preserved by the normalizer:
+    <code>arn:aws:bedrock:…:foundation-model/&lt;id&gt;</code> becomes the
+    <code>SkuMeter</code>. No ManageIQ join needed — managed services have
+    no VM in MIQ inventory, which is correct, not a gap.
   </div>
 </div>
 
-<h2 class="section rise d-2">By provider and model</h2>
-<div class="table-wrap rise d-2">
+<h2 class="sec in d1">By provider &amp; model</h2>
+<div class="tbl in d2">
 <table>
   <thead>
-    <tr>
-      <th>Provider</th>
-      <th>Model meter</th>
-      <th>Service</th>
-      <th class="num">Rows</th>
-      <th class="num">Total cost</th>
-      <th>Currency</th>
-    </tr>
+    <tr><th>Provider</th><th>Model meter</th><th>Service</th><th class="num">Rows</th><th class="num">Total cost</th><th>Ccy</th></tr>
   </thead>
   <tbody>
   {% for r in rows %}
     <tr>
-      <td><strong>{{ r.service_provider_name }}</strong></td>
+      <td class="name">{{ r.service_provider_name }}</td>
       <td class="mono">{{ r.sku_meter }}</td>
       <td class="muted">{{ r.service_name }}</td>
-      <td class="num muted">{{ r.row_count }}</td>
+      <td class="num">{{ r.row_count }}</td>
       <td class="num">{{ '%.4f'|format(r.total_cost|float) }}</td>
       <td class="muted">{{ r.billing_currency }}</td>
     </tr>

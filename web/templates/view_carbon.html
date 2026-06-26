@@ -1,38 +1,34 @@
 {% extends "_base.html" %}
-{% block title %}Carbon &middot; ENBD FinOps PoC{% endblock %}
+{% block title %}Carbon · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<h1 class="display rise">
-  Carbon,<br>
-  <em>honestly absent.</em>
-</h1>
-<p class="lede rise d-1">
-  Leadership requirement&nbsp;IV. FOCUS through v1.4 has no carbon,
-  emissions, or energy column &mdash; so this view is a roadmap to the
-  four real data streams, not a number we made up.
-</p>
+<div class="in">
+  <div class="page-eyebrow"><span class="req">REQ 04</span> · Sustainability</div>
+  <h1 class="title">Carbon, honestly absent.</h1>
+  <p class="sub">
+    FOCUS through v1.4 has no carbon, emissions, or energy column. This
+    view is a roadmap to four real data streams — not a number we made up.
+  </p>
+</div>
 
-<div class="banner bad rise d-1">
-  <span class="verdict">out of focus</span>
+<div class="banner out in d1">
+  <span class="tag">Out of FOCUS</span>
   <div>
-    A carbon number derived from FOCUS cost alone would be confidently
-    wrong &mdash; the failure mode SPEC&nbsp;&sect;0 warns against. The
-    honest answer is to keep carbon data <em>next to</em> the FOCUS
-    table, joined at the view layer, and to tell leadership the data
-    quality of each stream up front.
+    A carbon number derived from cost alone would be confidently wrong —
+    the failure mode SPEC §0 warns against. Keep carbon data <em>next to</em>
+    the FOCUS table, joined at the view layer, and state the data quality
+    of each stream up front.
   </div>
 </div>
 
-<h2 class="section rise d-2">Per-provider feeds (roadmap)</h2>
-<div class="table-wrap rise d-2">
+<h2 class="sec in d1">Per-provider feeds (roadmap)</h2>
+<div class="tbl in d2">
 <table>
-  <thead>
-    <tr><th>Provider</th><th>Feed</th><th>Status</th></tr>
-  </thead>
+  <thead><tr><th>Provider</th><th>Feed</th><th>Status</th></tr></thead>
   <tbody>
   {% for f in feeds %}
     <tr>
-      <td><strong>{{ f.provider }}</strong></td>
+      <td class="name">{{ f.provider }}</td>
       <td>{{ f.feed }}</td>
       <td class="muted">{{ f.status }}</td>
     </tr>
@@ -41,33 +37,23 @@
 </table>
 </div>
 
-<h2 class="section rise d-3">Layout placeholder
-  &mdash; <span style="color: var(--bad)">do not trust these numbers</span>
-</h2>
-<div class="banner warn rise d-3">
-  <span class="verdict">fake</span>
+<h2 class="sec in d3">Layout placeholder — <span style="color:var(--v-out)">do not trust these numbers</span></h2>
+<div class="banner partial in d3">
+  <span class="tag">Fake</span>
   <div>
-    The carbon column below is a hand-rolled ratio applied to cost. It
-    exists only so the page layout is real. Real carbon needs real
-    feeds:
-    <a class="subtle" href="https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/ccft-overview.html">AWS CCFT</a>,
+    The carbon column below is a hand-rolled ratio applied to cost,
+    present only so the layout is real. Real carbon needs real feeds:
+    <a class="link" href="https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/ccft-overview.html">AWS CCFT</a>,
     the Azure Emissions Impact Dashboard, and a custom on-prem model.
   </div>
 </div>
-<div class="table-wrap rise d-3">
+<div class="tbl in d3">
 <table>
-  <thead>
-    <tr>
-      <th>Provider</th>
-      <th class="num">Cost</th>
-      <th>Currency</th>
-      <th class="num">Fake CO<sub>2</sub>e (tonnes)</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Provider</th><th class="num">Cost</th><th>Ccy</th><th class="num">Fake CO₂e (t)</th></tr></thead>
   <tbody>
   {% for r in placeholder %}
     <tr>
-      <td><strong>{{ r.service_provider_name }}</strong></td>
+      <td class="name">{{ r.service_provider_name }}</td>
       <td class="num">{{ '%.2f'|format(r.total_cost|float) }}</td>
       <td class="muted">{{ r.currency }}</td>
       <td class="num muted">{{ r.fake_co2e_tonnes }}</td>
