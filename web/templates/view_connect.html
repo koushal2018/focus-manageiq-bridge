@@ -1,0 +1,128 @@
+{% extends "_base.html" %}
+{% block title %}Connect a source · ENBD FinOps Console{% endblock %}
+{% block content %}
+
+<div class="in">
+  <div class="page-eyebrow">Connect &amp; run</div>
+  <h1 class="title">Connect a data source.</h1>
+  <p class="sub">
+    Onboarding a cloud account is a registry entry plus a credential
+    reference — never a code change. Register a source, the dispatcher
+    normalizes it to FOCUS and loads it.
+  </p>
+</div>
+
+<div class="banner partial in d1">
+  <span class="tag">PoC scope</span>
+  <div>
+    In this PoC a registered source reads a local <strong>synthetic</strong>
+    export, so registering one and re-running the dispatcher actually
+    produces rows. <strong>It does not yet perform a live cloud fetch with the
+    credential you supply</strong> — that adapter half (<code>discover()</code>
+    over S3/blob + Secrets Manager) is wired in production. The credential
+    field stores a reference string only.
+  </div>
+</div>
+
+<h2 class="sec in d1">Registered sources</h2>
+<div class="tbl in d2">
+<table>
+  <thead>
+    <tr><th>Source ID</th><th>Type</th><th>Name</th><th>Location</th><th>Schedule</th><th></th></tr>
+  </thead>
+  <tbody id="src-body">
+  {% for s in sources %}
+    <tr data-id="{{ s.source_id }}">
+      <td class="mono" style="color:var(--tx)">{{ s.source_id }}</td>
+      <td><span class="pill matched">{{ s.source_type }}</span></td>
+      <td class="muted">{{ s.display_name }}</td>
+      <td class="mono">{{ s.location }}</td>
+      <td class="muted">{{ s.schedule }}</td>
+      <td><button class="rmq" data-id="{{ s.source_id }}">Remove</button></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2 class="sec in d3">Add a source</h2>
+<form id="addf" class="in d3">
+  <div class="grid2">
+    <label>Source type
+      <select id="f-type">
+        {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Source ID
+      <input id="f-id" placeholder="e.g. aws-payer-12345" autocomplete="off">
+    </label>
+    <label>Display name
+      <input id="f-name" placeholder="AWS — production payer" autocomplete="off">
+    </label>
+    <label>Credential reference
+      <input id="f-cred" placeholder="arn:aws:secretsmanager:… (demo: synthetic)" autocomplete="off">
+    </label>
+    <label class="wide">Location
+      <input id="f-loc" placeholder="(blank = use the synthetic export for this type)" autocomplete="off">
+    </label>
+  </div>
+  <button id="addb" type="submit" class="askbtn">Register &amp; run dispatcher</button>
+</form>
+
+<div id="connect-result" style="margin-top:24px;"></div>
+
+<style>
+  form#addf .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+  form#addf label { display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--tx-3); }
+  form#addf label.wide { grid-column:1 / -1; }
+  form#addf input, form#addf select {
+    background: var(--bg-1); color: var(--tx); border:1px solid var(--line);
+    border-radius:7px; padding:9px 11px; font-family:var(--sans); font-size:13.5px;
+    letter-spacing:normal; text-transform:none; outline:none; transition:border-color .15s;
+  }
+  form#addf input:focus, form#addf select:focus { border-color: var(--acc-line); }
+  button.askbtn, button.rmq {
+    background: transparent; color: var(--acc); border:1px solid var(--acc-line);
+    border-radius:999px; padding:6px 14px; font-family:var(--mono); font-size:10.5px;
+    letter-spacing:0.08em; cursor:pointer; transition:all .15s var(--ease);
+  }
+  button.askbtn { padding:9px 20px; }
+  button.rmq { color: var(--v-out); border-color: rgba(217,112,130,.3); padding:4px 11px; }
+  button.askbtn:hover { background: var(--acc-bg); border-color: var(--acc); }
+  button.rmq:hover { background: rgba(217,112,130,.1); }
+  @media (max-width:640px){ form#addf .grid2 { grid-template-columns:1fr; } }
+</style>
+<script>
+  async function postJSON(u, b) {
+    const r = await fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
+    const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = {detail:t}; }
+    return {ok:r.ok, status:r.status, data:d};
+  }
+  function banner(kind, tag, msg) {
+    return '<div class="banner '+kind+'"><span class="tag">'+tag+'</span><div>'+msg+'</div></div>';
+  }
+  document.getElementById('addf').addEventListener('submit', async e => {
+    e.preventDefault();
+    const body = {
+      source_type: document.getElementById('f-type').value,
+      source_id: document.getElementById('f-id').value.trim(),
+      display_name: document.getElementById('f-name').value.trim(),
+      credential_ref: document.getElementById('f-cred').value.trim(),
+      location: document.getElementById('f-loc').value.trim(),
+    };
+    const el = document.getElementById('connect-result');
+    el.innerHTML = '<p style="color:var(--tx-3)">Registering &amp; dispatching…</p>';
+    const {ok, data} = await postJSON('/connect/add', body);
+    if (!ok) { el.innerHTML = banner('out','Error', data.error || JSON.stringify(data)); return; }
+    const rows = data.dispatch.focus_rows;
+    el.innerHTML = banner('native','Registered',
+      'Source <code>'+body.source_id+'</code> registered. Dispatcher produced <strong>'+rows+'</strong> FOCUS rows across '+data.sources.length+' sources. Reloading…');
+    setTimeout(() => location.reload(), 1100);
+  });
+  document.querySelectorAll('.rmq').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.id;
+    const {ok, data} = await postJSON('/connect/remove', {source_id:id});
+    if (ok) location.reload();
+  }));
+</script>
+{% endblock %}

@@ -21,6 +21,9 @@ from web import queries
 # (in canned-query-only mode) even when Bedrock is disabled.
 from ai.router import router as ai_router
 
+# Connect-and-run: the clickable "register a data source" admin surface.
+from connectors.router import router as connect_router
+
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(THIS_DIR, "templates")
@@ -41,6 +44,7 @@ if os.path.isdir(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.include_router(ai_router)
+app.include_router(connect_router)
 
 
 @app.get("/", response_class=HTMLResponse)

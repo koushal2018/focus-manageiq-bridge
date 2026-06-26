@@ -314,6 +314,16 @@ _(nothing yet — start with Azure per SPEC §2)_
 - **Why it matters:** Anyone running the PoC pipeline by muscle memory (`python -m normalizer`) still works, but the connect-and-run demo uses `python -m connectors.dispatcher`. Don't let the two drift — the dispatcher is canonical going forward; the old `__main__` is kept only so existing docs/scripts don't break.
 - **EBA action:** Point CI and the docker entrypoint at `connectors.dispatcher`, not `normalizer.__main__`. Eventually retire the latter once nothing references it.
 
+### P-5. This dev environment kills backgrounded servers — verify routes with Starlette TestClient, not a live uvicorn
+- **What:** Launching `uvicorn` as a background job in this shell (via `&`, `nohup`, or `setsid`) reliably dies before it can serve — the harness reaps detached processes (exit 144 / connection-refused, no log file). Cost me several attempts.
+- **Why it matters:** "Run the server and curl it" is the instinct, and it does not work here. The reliable verification path is FastAPI/Starlette's `TestClient`, which exercises the full app (routers, templates, DB calls) in-process with no socket.
+- **EBA action:** For route verification in this environment use:
+  ```python
+  from starlette.testclient import TestClient; from web.app import app
+  c = TestClient(app); print(c.get("/connect/").status_code)
+  ```
+  Needs `httpx` installed (TestClient dependency). For an actual demo the operator runs uvicorn/gunicorn in a normal shell or container where backgrounding works.
+
 ## Web layer
 
 ### W-1. Starlette 1.x flipped `Jinja2Templates.TemplateResponse` to request-first
