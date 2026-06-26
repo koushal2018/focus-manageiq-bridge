@@ -1,19 +1,27 @@
 {% extends "_base.html" %}
-{% block title %}Cloud vs on-prem &mdash; ENBD FinOps PoC{% endblock %}
+{% block title %}Cloud &times; on-prem &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
-<h1>Cloud vs on-prem cost</h1>
-<p class="subtitle">Leadership requirement #3.</p>
 
-<div class="banner warn">
-  <span class="verdict">FOCUS</span>
-  <b>Conditional.</b> FOCUS is provider-agnostic but doesn't <em>source</em>
-  on-prem data &mdash; the cloud half below is FOCUS-native, the on-prem half
-  is an estimate from ManageIQ's CPU+memory cost calc (SPEC &sect;0). The
-  ENBD chargeback module is enabled on the appliance but the rates are
-  defaults (GOTCHA G-5); slice 6 wires this view to the real rates.
+<h1 class="display rise">Cloud and on-prem,<br><em>side by side.</em></h1>
+<p class="lede rise delay-1">
+  Leadership requirement #3. The cloud half is FOCUS-native, grouped by
+  provider. The on-prem half is ManageIQ's recharge model &mdash; a vCPU
+  rate plus a memory-GB rate, persisted as if it were a FOCUS row.
+</p>
+
+<div class="banner warn rise delay-1">
+  <span class="verdict">conditional</span>
+  <div>
+    FOCUS is provider-agnostic but does not <em>source</em> on-prem data.
+    The cloud half below is from <code>focus_costs</code>; the on-prem
+    half is from <code>miq_onprem_cost</code>, populated by
+    <code>onprem/cost_model.py</code>. The rates are stubs &mdash; the EBA
+    team replaces them with the chargeback owner's real values.
+  </div>
 </div>
 
-<h2>Cloud cost</h2>
+<h2 class="section rise delay-2">Cloud cost</h2>
+<div class="table-wrap rise delay-2">
 <table>
   <thead>
     <tr>
@@ -29,22 +37,27 @@
     <tr>
       <td>{{ r.service_provider_name }}</td>
       <td class="muted">{{ r.source }}</td>
-      <td class="num">{{ r.row_count }}</td>
+      <td class="num muted">{{ r.row_count }}</td>
       <td class="num">{{ '%.2f'|format(r.total_cost|float) }}</td>
-      <td>{{ r.billing_currency }}</td>
+      <td class="muted">{{ r.billing_currency }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-
-<h2>On-prem cost <span class="pill unmatched_focus_only">estimated</span></h2>
-<div class="banner info">
-  <span class="verdict">CALC</span>
-  Per ENBD's existing ManageIQ formula: vCPU rate + memory-GB rate over 4
-  years, expressed here as a monthly cost. Rates used (USD, stubbed):
-  <code>${{ '$50.00'|safe }}/core/month</code> + <code>${{ '$5.00'|safe }}/GB/month</code>.
-  Replaced by real chargeback rates in slice 6.
 </div>
+
+<h2 class="section rise delay-3">On-prem recharge <span class="pill unmatched_focus_only">estimated</span></h2>
+<div class="banner info rise delay-3">
+  <span class="verdict">calc</span>
+  <div>
+    ENBD's existing per-resource formula: vCPU rate &plus; memory-GB rate.
+    Stub values: <code>$50.00 / core / month</code>, <code>$5.00 / GB / month</code>.
+    Set via <code>ONPREM_RATE_*</code> env vars. Replace with the
+    chargeback module's real rates before any leadership review.
+  </div>
+</div>
+
+<div class="table-wrap rise delay-3">
 <table>
   <thead>
     <tr>
@@ -54,7 +67,7 @@
       <th class="num">Memory (GB)</th>
       <th class="num">CPU %</th>
       <th class="num">Mem %</th>
-      <th class="num">Monthly cost (USD)</th>
+      <th class="num">Monthly USD</th>
     </tr>
   </thead>
   <tbody>
@@ -70,9 +83,11 @@
     </tr>
   {% endfor %}
   <tr>
-    <td colspan="6"><b>Total on-prem (monthly)</b></td>
-    <td class="num"><b>{{ '%.2f'|format(on_prem_total) }}</b></td>
+    <td colspan="6"><strong>Total on-prem (monthly)</strong></td>
+    <td class="num"><strong>{{ '%.2f'|format(on_prem_total) }}</strong></td>
   </tr>
   </tbody>
 </table>
+</div>
+
 {% endblock %}

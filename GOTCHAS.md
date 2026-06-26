@@ -105,7 +105,27 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 
 ## (Reserve sections — fill as we hit them)
 
-## FOCUS normalization
+## Customer comprehension
+
+### CX-1. The FOCUS `Allocated*` columns are NOT a "source→FOCUS mapping" surface — they describe internal cost-allocation
+- **What:** On the 2026-06-26 call Ahmed asked "where do I read the documentation that explains how the source maps to FOCUS?", pointing at the `Allocated Method ID`, `Allocated Resource ID`, `Allocated Tags`, etc. columns on focus.finops.org/columns. He read those as the integration contract between a provider's raw export and FOCUS.
+- **Why it matters:** That is a complete misread, but a sensible one — those columns sound like mapping fields. They actually describe how a SINGLE COST was ALLOCATED across multiple targets (shared cost split between tenants, untagged-cost spread proportionally, support fee allocated to a specific business unit). The source→FOCUS mapping is an integration choice that lives in adapter code (our `normalizer/`), not in the FOCUS spec.
+- **EBA action:** Before the workshop, walk Ahmed through `normalizer/{azure,aws,oci}_to_focus.py`. Frame: "source providers emit their own column names; FOCUS is the destination schema; the mapping table lives in our code, not in the spec." Point at `AZURE_SERVICE_FAMILY_TO_FOCUS` as the worked example. The `Allocated*` columns are downstream of that and only relevant if ENBD does shared-cost allocation — separate problem.
+
+### CX-2. Harsha will NOT confirm the EBA workshop dates until he sees a working dashboard link
+- **What:** 2026-06-26 call. Harsha was explicit: "before we commit to this workshop, I want to be crystal clear on what we're delivering" → asked for a working dashboard with mock data → 3-day review → loop back through Nacira and Ali Ray → then dates.
+- **Why it matters:** The PoC's "deliverable = GOTCHAS.md" framing is RIGHT for the post-workshop hand-off but is NOT what unblocks the workshop schedule. Harsha needs to see screens. Until he does, the engagement is stuck on his Friday.
+- **EBA action:** Ship the running app to a URL Harsha can hit. Single-host EC2 with nginx in front of `uvicorn web.app:app` is enough — this is a demo, not a SLA. Make sure: (a) the `SYNTHETIC DATA` ribbon is visible, (b) every banner reads honestly, (c) the AI tab works in canned-only mode, (d) the carbon tab makes its "out of FOCUS" framing un-missable. THIS is the gate.
+
+### CX-4. The dev EC2 instance profile has no CloudFront / EC2 permissions — provisioning AWS infrastructure from this shell hits AccessDenied
+- **What:** `aws sts get-caller-identity` from this EC2 returns the instance role `EnbdDemoManageIQStack-ManageIQInstanceRole74DFDE14-PkhSOEYhGRaB`. Calling `cloudfront:ListDistributions`, `ec2:DescribeInstances`, or `ec2:DescribeSecurityGroups` from that role returns `AccessDenied` / `UnauthorizedOperation`. Account `401552979575` (the demo account).
+- **Why it matters:** The intuitive plan ("CloudFront distribution in front of EC2 origin → share URL with Harsha") cannot be executed from inside the EC2 itself. The instance role is correctly scoped to what its workload needs (running ManageIQ, talking to its own services). Standing up demo-facing infrastructure (CloudFront, security-group changes, ACM certs) needs a HUMAN AWS session with elevated permissions, run from a laptop or a CloudShell, NOT from the workload instance.
+- **EBA action:**
+  - Provision demo infrastructure from a session-credentialed CLI (laptop with `aws sso login`, or CloudShell in the same account with the user's role assumed). The EC2 just hosts the origin.
+  - Asking an AI in this shell to "create the CloudFront distribution" will hit AccessDenied and waste a turn. Send the AI the resulting CloudFront origin once it exists, instead.
+- **What:** Harsha's exact framing: "Bedrock + Anthropic + OAI [Azure OpenAI] across OCI / AWS / Azure, per cloud, per model, with cost." The PoC's slice 1 generators emit Bedrock + Azure OpenAI rows but **no OCI generative-AI line items**. The OCI usage report can carry them (service code `GEN_AI`).
+- **Why it matters:** The dashboard view 1 currently lists 7 SKU buckets, all AWS Bedrock + one Azure OpenAI. A demo to Harsha with zero OCI AI rows will look like the PoC doesn't cover OCI for AI — which is exactly the question he's asking. We need at least one synthetic OCI gen-AI row before the demo link goes out.
+- **EBA action:** Extend `generators/common.py` BEDROCK_MODELS / add an OCI gen-AI section to `generators/oci_usage.py`. Then re-run the pipeline. ~30 min of work; pure additive.
 
 ### F-1. FOCUS v1.3 deprecates `Provider` and `Publisher` — use `ServiceProviderName` / `InvoiceIssuerName`
 - **What:** Verified against FOCUS v1.3 column inventory (focus.finops.org MCP, 2026-06-25): `Provider` and `Publisher` carry a deprecation message ("deprecated in v1.3 and will be removed in v1.4"). Their replacements are `ServiceProviderName` and `InvoiceIssuerName` respectively (both added with v1.3).
@@ -259,6 +279,11 @@ _(nothing yet — start with Azure per SPEC §2)_
 - **What:** Per-VM kgCO<sub>2</sub>e for an on-prem workload is dominated by Power Usage Effectiveness (PUE) — the data center's overhead multiplier for cooling. A "best-in-class" PUE is ~1.2; an older DC is ~1.6. The carbon math swings by 25–30% between those two.
 - **Why it matters:** If the EBA team picks a PUE from a Wikipedia article and ships, the on-prem carbon number is a guess presented as a measurement. Sean's data-sensitivity concern (SPEC §0) applies here too — wrong but confident is worse than honestly absent.
 - **EBA action:** Get the DC owner to sign off on the PUE value in writing. Display the value used directly in the UI. Recompute when the DC owner publishes a new number.
+
+### W-2. `stylebook.harmony.a2z.com` is behind Amazon SSO — design tokens not fetchable from an unauthenticated session
+- **What:** The Amazon Harmony stylebook (the source of the "Liquid Motion" / Evolution design language) lives on `*.a2z.com`, which requires Amazon midway/SSO. WebFetch from this Claude session returns an empty document (auth challenge stripped).
+- **Why it matters:** The demo's visual language can't be a verbatim implementation of Harmony Evolution without the real tokens. I'm building **"Liquid Motion-inspired"** — fluid gradients, motion-driven hierarchy, glass surfaces — using the publicly-described characteristics. Note this on the demo footer or in handoff so reviewers understand it's homage, not implementation.
+- **EBA action:** If brand-alignment with Harmony Evolution becomes required (e.g. for a Sean-level review), have someone with Amazon SSO export the tokens (palette, type scale, motion curves) into a self-contained JSON the PoC consumes. The CSS layer in `web/templates/_base.html` is designed to accept token-substitution cleanly.
 
 ## Web layer
 

@@ -1,24 +1,32 @@
 {% extends "_base.html" %}
-{% block title %}AI cost &mdash; ENBD FinOps PoC{% endblock %}
+{% block title %}AI cost &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
-<h1>AI cost by cloud &times; model</h1>
-<p class="subtitle">Leadership requirement #1.</p>
 
-<div class="banner ok">
-  <span class="verdict">FOCUS</span>
-  <b>Native.</b> ServiceCategory = "AI and Machine Learning" is a normative
-  allowed value in FOCUS v1.3 &sect;3.1.55.5. The Bedrock model id is preserved
-  in SkuMeter by <code>normalizer/aws_to_focus.py</code> (it strips the model
-  id out of the resource ARN: <code>arn:aws:bedrock:...:foundation-model/&lt;id&gt;</code>).
-  No join with ManageIQ is needed for this view &mdash; per GOTCHA J-6, Bedrock and
-  Azure OpenAI rows are <em>unmatched_focus_only</em> by design.
+<h1 class="display rise">AI cost,<br><em>per model.</em></h1>
+<p class="lede rise delay-1">
+  Leadership requirement #1. Bedrock and Azure OpenAI surface natively
+  through <code>ServiceCategory='AI and Machine Learning'</code>. OCI's
+  generative-AI service joins through the same normalized column.
+</p>
+
+<div class="banner good rise delay-1">
+  <span class="verdict">native</span>
+  <div>
+    FOCUS-native. The Bedrock model identifier is preserved through the
+    normalizer's enrichment step: <code>arn:aws:bedrock:&hellip;:foundation-model/&lt;id&gt;</code>
+    becomes the <code>SkuMeter</code>. No join with ManageIQ is needed for
+    this view &mdash; managed services have no VM equivalent in MIQ inventory,
+    and that is correct, not a bug.
+  </div>
 </div>
 
+<h2 class="section rise delay-2">By provider and model</h2>
+<div class="table-wrap rise delay-2">
 <table>
   <thead>
     <tr>
       <th>Provider</th>
-      <th>SKU / model meter</th>
+      <th>Model meter</th>
       <th>Service</th>
       <th class="num">Rows</th>
       <th class="num">Total cost</th>
@@ -29,13 +37,15 @@
   {% for r in rows %}
     <tr>
       <td>{{ r.service_provider_name }}</td>
-      <td class="muted" style="font-family:monospace; font-size:12px;">{{ r.sku_meter }}</td>
-      <td>{{ r.service_name }}</td>
-      <td class="num">{{ r.row_count }}</td>
+      <td class="mono">{{ r.sku_meter }}</td>
+      <td class="muted">{{ r.service_name }}</td>
+      <td class="num muted">{{ r.row_count }}</td>
       <td class="num">{{ '%.4f'|format(r.total_cost|float) }}</td>
-      <td>{{ r.billing_currency }}</td>
+      <td class="muted">{{ r.billing_currency }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
+
 {% endblock %}

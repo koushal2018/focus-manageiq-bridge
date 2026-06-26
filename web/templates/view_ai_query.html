@@ -1,78 +1,128 @@
 {% extends "_base.html" %}
-{% block title %}NL query &mdash; ENBD FinOps PoC{% endblock %}
+{% block title %}NL query &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
-<h1>Natural-language query</h1>
-<p class="subtitle">Optional Bedrock layer per SPEC &sect;3.6.</p>
+
+<h1 class="display rise">Ask in language,<br><em>answer in SQL.</em></h1>
+<p class="lede rise delay-1">
+  Optional Bedrock layer (SPEC &sect;3.6). Canned queries run unconditionally;
+  free-text is gated behind a parser-level SQL allowlist so wrong-cost-
+  with-confident-narration cannot happen by accident.
+</p>
 
 {% if not bedrock_enabled %}
-<div class="banner warn">
-  <span class="verdict">AI OFF</span>
-  Bedrock NL-query is disabled this session (<code>BEDROCK_DISABLED=1</code>).
-  The canned queries below still run. To enable free-text:
-  <code>BEDROCK_DISABLED=0</code> with AWS credentials configured for
-  <code>{{ region }}</code> against <code>{{ model }}</code>.
+<div class="banner warn rise delay-1">
+  <span class="verdict">ai off</span>
+  <div>
+    Bedrock NL-query is disabled this session (<code>BEDROCK_DISABLED=1</code>).
+    The canned queries below still run. To enable free-text:
+    <code>BEDROCK_DISABLED=0</code> with AWS credentials configured for
+    <code>{{ region }}</code> against <code>{{ model }}</code>.
+  </div>
 </div>
 {% else %}
-<div class="banner info">
-  <span class="verdict">AI ON</span>
-  Free-text mode active. Region: <code>{{ region }}</code>.
-  Model: <code>{{ model }}</code>. Every answer must show the SQL that
-  was run and the rows it returned &mdash; no narration without provenance.
+<div class="banner info rise delay-1">
+  <span class="verdict">ai on</span>
+  <div>
+    Free-text mode active. Region: <code>{{ region }}</code>. Model:
+    <code>{{ model }}</code>. Every answer shows the SQL it ran and the rows
+    it returned &mdash; no narration without provenance.
+  </div>
 </div>
 {% endif %}
 
-<div class="banner bad">
-  <span class="verdict">GUARDRAIL</span>
-  Every SQL the model produces goes through <code>ai/sql_guard.py</code>:
-  parsed by sqlglot, rejected unless it's a single SELECT against the four
-  allowlisted tables (<code>focus_costs</code>, <code>resource_join_map</code>,
-  <code>miq_utilization</code>, <code>miq_onprem_cost</code>).
-  Wrong-cost-with-confident-narration is the worst outcome for a bank;
-  this layer fails closed.
+<div class="banner bad rise delay-1">
+  <span class="verdict">guard</span>
+  <div>
+    Every SQL the model produces is parsed by <code>sqlglot</code> in
+    <code>ai/sql_guard.py</code>. Rejected unless it is a single SELECT
+    against the four-table FinOps allowlist
+    (<code>focus_costs</code>, <code>resource_join_map</code>,
+    <code>miq_utilization</code>, <code>miq_onprem_cost</code>). Fails closed.
+  </div>
 </div>
 
-<h2>Canned queries (no AI involved)</h2>
+<h2 class="section rise delay-2">Canned queries (no AI involved)</h2>
+<div class="table-wrap rise delay-2">
 <table>
   <thead>
-    <tr><th>Name</th><th>Description</th><th>Params</th><th>Run</th></tr>
+    <tr><th>Name</th><th>Description</th><th>Params</th><th></th></tr>
   </thead>
   <tbody>
   {% for q in queries %}
     <tr>
-      <td><code>{{ q.name }}</code></td>
+      <td class="mono">{{ q.name }}</td>
       <td class="muted">{{ q.description }}</td>
-      <td class="muted">
+      <td class="mono">
         {% if q.params %}
-          {% for k, v in q.params.items() %}
-            <code>{{ k }}</code>={{ v }}{% if not loop.last %}, {% endif %}
-          {% endfor %}
+          {% for k, v in q.params.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
         {% else %}
-          <em>(none)</em>
+          <span class="muted">(none)</span>
         {% endif %}
       </td>
-      <td><button class="run-btn" data-q="{{ q.name }}" data-params='{{ q.params|tojson }}'>Run</button></td>
+      <td>
+        <button class="run-btn" data-q="{{ q.name }}" data-params='{{ q.params|tojson }}'>Run</button>
+      </td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 
-<h2>Free-text question {% if not bedrock_enabled %}<span class="pill no_resource_id">disabled</span>{% endif %}</h2>
-<form id="ask-form" {% if not bedrock_enabled %}style="opacity:.55"{% endif %}>
-  <textarea id="question" placeholder="e.g. Which workloads cost the most relative to their CPU utilization?"
-            style="width:100%; min-height:80px; background:var(--panel); color:var(--ink); border:1px solid #2a3a55; border-radius:6px; padding:10px; font-family:inherit; font-size:14px;"
+<h2 class="section rise delay-3">Free-text question
+  {% if not bedrock_enabled %}<span class="pill no_resource_id">disabled</span>{% endif %}
+</h2>
+<form id="ask-form" class="rise delay-3" {% if not bedrock_enabled %}style="opacity:.55"{% endif %}>
+  <textarea id="question"
+            placeholder="e.g. Which workloads cost the most relative to their CPU utilization?"
             {% if not bedrock_enabled %}disabled{% endif %}></textarea>
-  <button id="ask-btn" type="submit" {% if not bedrock_enabled %}disabled{% endif %}
-          style="margin-top:10px; padding:8px 14px; background:var(--accent); color:white; border:0; border-radius:4px; cursor:pointer;">
+  <button id="ask-btn" type="submit" class="primary-btn" {% if not bedrock_enabled %}disabled{% endif %}>
     Ask Bedrock
   </button>
 </form>
 
-<div id="result" style="margin-top:24px;"></div>
+<div id="result" style="margin-top: 28px;"></div>
 
 <style>
-  button.run-btn { padding:5px 10px; background:var(--panel-2); color:var(--ink); border:1px solid #2a3a55; border-radius:4px; cursor:pointer; }
-  button.run-btn:hover { background:var(--accent); color:white; }
-  pre.sql { background:var(--panel); border-radius:6px; padding:12px; overflow-x:auto; color:var(--ink-2); font-size:12px; }
+  button.run-btn, button.primary-btn {
+    background: var(--bg-glass-2);
+    color: var(--ink-bright);
+    border: 1px solid var(--seam-strong);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all .2s var(--ease-glide);
+  }
+  button.run-btn:hover, button.primary-btn:hover:not(:disabled) {
+    background: var(--molten);
+    color: var(--bg-deep);
+    border-color: transparent;
+  }
+  button.primary-btn { padding: 10px 22px; margin-top: 14px; font-size: 12px; }
+  button.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  textarea#question {
+    width: 100%;
+    min-height: 88px;
+    background: var(--bg-rise);
+    color: var(--ink-bright);
+    border: 1px solid var(--seam);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    transition: border-color .2s var(--ease-glide), box-shadow .2s var(--ease-glide);
+  }
+  textarea#question:focus {
+    border-color: var(--molten-2);
+    box-shadow: 0 0 0 3px rgba(70, 196, 255, 0.08);
+  }
 </style>
 
 <script>
@@ -86,33 +136,33 @@
     let data; try { data = JSON.parse(text); } catch { data = {detail: text}; }
     return {ok: r.ok, status: r.status, data};
   }
-
   function renderRows(rows) {
     if (!rows || !rows.length) return '<p class="muted"><em>(0 rows)</em></p>';
     const cols = Object.keys(rows[0]);
-    let h = '<table><thead><tr>';
+    let h = '<div class="table-wrap"><table><thead><tr>';
     for (const c of cols) h += '<th>' + c + '</th>';
     h += '</tr></thead><tbody>';
     for (const r of rows) {
       h += '<tr>';
-      for (const c of cols) h += '<td>' + (r[c] === null ? '<em>null</em>' : String(r[c])) + '</td>';
+      for (const c of cols) {
+        const v = r[c];
+        h += '<td>' + (v === null ? '<em class="muted">null</em>' : String(v)) + '</td>';
+      }
       h += '</tr>';
     }
-    h += '</tbody></table>';
+    h += '</tbody></table></div>';
     return h;
   }
-
   function showResult({sql, rows, err}) {
     const root = document.getElementById('result');
     if (err) {
-      root.innerHTML = '<div class="banner bad"><span class="verdict">ERROR</span>' + err + '</div>';
+      root.innerHTML = '<div class="banner bad"><span class="verdict">error</span><div>' + err + '</div></div>';
       return;
     }
     root.innerHTML =
-      '<h2>SQL</h2><pre class="sql">' + sql.replace(/</g, '&lt;') + '</pre>' +
-      '<h2>Rows</h2>' + renderRows(rows);
+      '<h2 class="section">SQL run</h2><pre class="sql">' + sql.replace(/</g, '&lt;') + '</pre>' +
+      '<h2 class="section">Rows</h2>' + renderRows(rows);
   }
-
   document.querySelectorAll('.run-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const q = btn.dataset.q;
@@ -128,7 +178,6 @@
       showResult({sql: data.sql, rows: data.rows});
     });
   });
-
   document.getElementById('ask-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const question = document.getElementById('question').value.trim();

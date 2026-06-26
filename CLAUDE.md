@@ -31,6 +31,7 @@ EBA-BACKLOG.md short ordered list of what ENBD builds during the sprint
 
 ## Skills loaded for this project
 - `manageiq-sme` — user-level at `~/.claude/skills/manageiq-sme/`. Originally written for a sibling project (`enbd_manageiq`) so its project-specific paths (e.g. `ai/manageiq_client.py`, `focus_v1_2_view`) DO NOT apply here. The ManageIQ API/VMDB knowledge does.
+- Use the `/frontend-design` skill when building UI components.
 
 ## MCP servers (declared in `.mcp.json`)
 - **`focus-finops`** (HTTP) — authoritative FOCUS column/spec lookup. Use it before quoting FOCUS rules from memory.
