@@ -135,7 +135,7 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 - **What:** `miq_snapshot.py`, `onprem/cost_model.py`, `web/queries.py` each independently looped `WORKLOADS` and incremented `vm_id` from 90001 with bespoke cross-cloud "+1" logic. Reorder/insert a workload → on-prem cost attaches to the WRONG VM, no error.
 - **Fix applied:** one `common.workload_vm_ids()` returns the canonical {canonical_name → [vm_ids]} map; the three call sites import it. Single source of truth.
 
-### H-3. Join is exact-string-equality — real-world casing/format variance returns silent zero-matches (OPEN)
+### H-3. Join is exact-string-equality — real-world casing/format variance returns silent zero-matches (FIXED)
 - **What:** `ResourceId == uid_ems`/`ems_ref` exact match. Real Azure ARM paths differ in case (case-preserving, case-insensitive); AWS ARNs vary bare-id vs full-ARN; whitespace/Unicode. One mismatch → workload silently lands in `unmatched_focus_only`, wrong attribution shown as fact.
 - **EBA action:** canonicalize per provider before compare (case-fold ARM paths, normalize ARN form, strip/NFC). Add a secondary fuzzy key (name+account+region) as fallback and FLAG fuzzy matches rather than trusting them.
 
@@ -151,7 +151,7 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 - **What:** FOCUS has no mandated unique row id. The dispatcher re-run appends; there's no "already loaded this export" guard. Re-running doubles rows.
 - **EBA action:** idempotency key = (export-id + row-hash) or a provider-supplied invoice/line id; upsert or skip-seen. Required before any scheduled/retryable load.
 
-### H-7. Money handled as Python float in the join aggregation (OPEN)
+### H-7. Money handled as Python float in the join aggregation (FIXED in join; loader/views still mix float — partial)
 - **What:** `focus_billed_cost_sum` is summed as float; money must be Decimal/NUMERIC end-to-end or it drifts.
 - **EBA action:** keep monetary values Decimal in Python, NUMERIC in SQL; never float.
 

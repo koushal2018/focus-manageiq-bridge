@@ -1,9 +1,21 @@
-# ENBD Multi-Cloud FinOps PoC
+# focus-manageiq-bridge
 
-A throwaway de-risking spike for the Emirates NBD "Multi-Cloud Cost
-Optimization" engagement. Normalizes AWS / Azure / OCI cost data to
-**FOCUS v1.3**, joins it to **ManageIQ** inventory + utilization, and serves
-four leadership views with honest data-source verdicts.
+**Bridges multi-cloud FOCUS cost data to ManageIQ inventory + utilization.**
+Built for the Emirates NBD "Multi-Cloud Cost Optimization" engagement.
+Ingests native **FOCUS 1.2** exports from AWS / Azure / OCI (or, for
+historical data, parses CUR / cost-export / usage-report formats), joins
+them to **ManageIQ** inventory and utilization on a per-provider asymmetric
+key, and serves leadership views with honest data-source verdicts.
+
+The hard, valuable thing this does — and what the name reflects — is the
+**FOCUS ↔ ManageIQ join** (the cost data carries no utilization or on-prem
+identity; ManageIQ has both but no FOCUS cost). Everything else is a view
+over that bridge.
+
+> Git directory is still `enbd-multicloud-finops-poc`; rename to
+> `focus-manageiq-bridge` at a clean checkpoint (it changes the auto-memory
+> path + breaks the running container/venv mid-session, so it's a deliberate
+> step, not done live).
 
 > **All data is synthetic.** `DEMO-` prefixes, fake account IDs, no real
 > cloud credentials. The most valuable artifact in this repo is

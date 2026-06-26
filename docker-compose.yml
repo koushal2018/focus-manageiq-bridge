@@ -7,7 +7,7 @@
 # Portable (SPEC §2): runs on a laptop, on-prem, or any AWS host.
 # All data is synthetic. No real ENBD data, no real cloud credentials.
 # =============================================================
-name: enbd-finops
+name: focus-manageiq-bridge
 
 services:
   db:
