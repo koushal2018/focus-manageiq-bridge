@@ -92,8 +92,19 @@ CREATE TABLE focus_costs (
     -- Tags as a JSON blob (Azure/AWS/OCI all hand us these differently)
     tags                    JSONB,                         -- Tags
 
+    -- Provider x_ extension columns preserved as JSONB (GOTCHA H-9) — e.g.
+    -- AWS x_Discounts/x_Operation/x_ServiceCode. Portable FOCUS consumers
+    -- ignore it; AWS-specific analysis can read it.
+    extensions              JSONB,
+
+    -- Idempotency key (GOTCHA H-6): stable hash of the row's identifying
+    -- fields. A full truncate+reload is idempotent on its own; this enables
+    -- safe INCREMENTAL upserts (ON CONFLICT) when the load becomes append-mode.
+    idempotency_key         TEXT,
+
     loaded_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_focus_costs_idem ON focus_costs(idempotency_key);
 
 CREATE INDEX idx_focus_costs_resource_id        ON focus_costs(resource_id);
 CREATE INDEX idx_focus_costs_service_category   ON focus_costs(service_category);

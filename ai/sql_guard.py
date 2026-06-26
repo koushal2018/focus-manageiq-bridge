@@ -117,6 +117,35 @@ def validate(sql: str) -> sqlglot.exp.Expression:
     return tree
 
 
+def financial_sanity_warnings(sql: str) -> list[str]:
+    """Flag financially-dangerous-but-valid SQL (GOTCHA H-10).
+
+    The allowlist guard stops injection; it does NOT stop a query that runs
+    fine and returns a WRONG number. The single most likely such error here
+    is SUM-ing the raw `billed_cost`, which mixes AED and USD across
+    providers (H-1). We warn (and the caller surfaces it) rather than
+    silently trusting a cross-currency total.
+    """
+    warnings: list[str] = []
+    low = " ".join(sql.lower().split())
+    # SUM/AVG/total over the raw currency-mixed column without the _usd suffix.
+    import re
+    if re.search(r"(sum|avg)\s*\(\s*billed_cost\s*\)", low):
+        warnings.append(
+            "aggregates raw billed_cost — mixes AED and USD across providers. "
+            "Use billed_cost_usd for cross-provider totals (H-1)."
+        )
+    # Aggregating cost without grouping or filtering by currency is suspicious
+    # if it touches focus_costs and the raw column.
+    if "focus_costs" in low and "billed_cost" in low and "billed_cost_usd" not in low \
+            and re.search(r"(sum|avg)\s*\(", low):
+        warnings.append(
+            "cost aggregate on focus_costs does not use the USD-normalized "
+            "column; verify currencies are not being mixed."
+        )
+    return warnings
+
+
 def is_readonly(sql: str) -> tuple[bool, str | None]:
     """Wrapper that returns (ok, reason)."""
     try:

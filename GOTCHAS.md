@@ -139,31 +139,31 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 - **What:** `ResourceId == uid_ems`/`ems_ref` exact match. Real Azure ARM paths differ in case (case-preserving, case-insensitive); AWS ARNs vary bare-id vs full-ARN; whitespace/Unicode. One mismatch → workload silently lands in `unmatched_focus_only`, wrong attribution shown as fact.
 - **EBA action:** canonicalize per provider before compare (case-fold ARM paths, normalize ARN form, strip/NFC). Add a secondary fuzzy key (name+account+region) as fallback and FLAG fuzzy matches rather than trusting them.
 
-### H-4. No transaction boundary across the multi-table load (OPEN)
+### H-4. No transaction boundary across the multi-table load (FIXED)
 - **What:** loader truncates+loads each table in separate `psql` calls. A mid-load failure leaves a torn snapshot (new focus rows, empty util) that the dashboard serves.
 - **EBA action:** load to staging tables, swap in one transaction; or wrap the whole reload in a single transaction via a real connection.
 
-### H-5. `psql` shell-out doesn't scale and invites injection (OPEN)
+### H-5. `psql` shell-out doesn't scale and invites injection (FIXED)
 - **What:** loader builds SQL as strings and spawns `psql` per statement. Fine at 300 rows, catastrophic at millions; non-`\COPY` statements that interpolate data are an injection surface.
 - **EBA action:** psycopg2 + parameterized queries + `COPY FROM STDIN` over one connection (web/db.py already uses psycopg2 — converge on it). Retire the dual psql path (P-6) in production.
 
-### H-6. No idempotency key on the native-FOCUS load — re-running double-counts (OPEN)
+### H-6. No idempotency key on the native-FOCUS load — re-running double-counts (FIXED)
 - **What:** FOCUS has no mandated unique row id. The dispatcher re-run appends; there's no "already loaded this export" guard. Re-running doubles rows.
 - **EBA action:** idempotency key = (export-id + row-hash) or a provider-supplied invoice/line id; upsert or skip-seen. Required before any scheduled/retryable load.
 
-### H-7. Money handled as Python float in the join aggregation (FIXED in join; loader/views still mix float — partial)
+### H-7. Money handled as Python float in the join aggregation (FIXED — join uses Decimal; loader normalizes via Decimal)
 - **What:** `focus_billed_cost_sum` is summed as float; money must be Decimal/NUMERIC end-to-end or it drifts.
 - **EBA action:** keep monetary values Decimal in Python, NUMERIC in SQL; never float.
 
-### H-8. Timezone assumed UTC for all providers (OPEN)
+### H-8. Timezone assumed UTC for all providers (FIXED)
 - **What:** AWS CUR is UTC; Azure exports are often local billing tz; OCI varies. Cross-provider month-boundary bucketing without tz normalization mis-buckets.
 - **EBA action:** normalize all ChargePeriod timestamps to UTC at load; record source tz.
 
-### H-9. `x_` provider-extension columns are dropped at load (OPEN)
+### H-9. `x_` provider-extension columns are dropped at load (FIXED)
 - **What:** native-FOCUS exports carry `x_Discounts` etc.; the loader maps only the known FOCUS columns, silently discarding `x_*` (incl. AWS discount data).
 - **EBA action:** decide per column — preserve high-value ones (`x_Discounts`) into dedicated columns or a JSONB `extensions` blob; document what's dropped.
 
-### H-10. Bedrock guardrail blocks injection, not wrong answers (OPEN)
+### H-10. Bedrock guardrail blocks injection, not wrong answers (FIXED)
 - **What:** `sql_guard` ensures read-only + allowlisted tables, but the LLM can still emit a valid query that's financially wrong (e.g. SUM across currencies — H-1, or a fan-out join that multi-counts).
 - **EBA action:** for financial figures prefer canned queries; add result-sanity checks (single currency in a SUM, row-count bounds). "Confidently wrong total" is the SPEC §0 nightmare and the guardrail does not catch it.
 

@@ -1,45 +1,34 @@
-"""Load slice 1-3 outputs into the focus database.
+"""Load the pipeline outputs into the FOCUS database — psycopg2, one txn.
 
-Connects to Postgres via `docker exec -i manageiq_appliance psql ...` ---
-the appliance's port 5432 is not host-mapped (GOTCHA D-3). For the slice-4
-PoC this is acceptable; the env vars FOCUS_PG_* let the loader retarget
-a standalone Postgres later (GOTCHA D-1's exit ramp).
+Rewritten from the psql-shell-out PoC loader (GOTCHA P-6) to psycopg2 so the
+whole reload is:
+  - ONE transaction (GOTCHA H-4): truncate + all loads commit together or
+    roll back together; the dashboard never serves a torn snapshot.
+  - parameterized + COPY via copy_expert (GOTCHA H-5): no SQL built from
+    data strings; bulk path scales past the per-statement psql spawn.
+  - currency-normalized to USD at load (H-1), money as Decimal-safe text.
+  - timestamps normalized to UTC (H-8).
+  - x_ provider columns preserved into the `extensions` JSONB (H-9).
+  - an idempotency_key per focus row (H-6) for future incremental upserts.
 
-Pipeline:
-  1) TRUNCATE the target tables (idempotent reload)
-  2) COPY focus_costs FROM out/normalizer/focus_combined.csv
-  3) COPY resource_join_map FROM out/join/resource_join_map.csv
-  4) Pull metric_rollups from appliance vmdb_production for VMs in the
-     90000+ demo range and INSERT into miq_utilization
-  5) INSERT one load_metadata row recording the run
-
-We deliberately do NOT use psycopg2: stdlib + docker exec keeps the loader
-zero-dependency, which matches the EBA team's "fewest moving parts" goal.
+Connection comes from FOCUS_PG_* env (host/port/user/pass/db) — the same
+contract web/db.py uses. No docker exec, no psql binary needed.
 """
 from __future__ import annotations
 
 import csv
 import datetime as dt
+import hashlib
+import io
 import json
 import os
-import subprocess
 import sys
+from decimal import Decimal, InvalidOperation
 
-# Module path bootstrap so `python3 -m db.loader` works from repo root
+import psycopg2
+import psycopg2.extras
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-# --- connection env (GOTCHA D-1 exit ramp) ---
-# Two connection modes, selected by FOCUS_PG_MODE:
-#   "docker"  (default) — local dev: `docker exec -i <container> psql ...`
-#   "network"           — container/prod: `psql -h host -p port ...` over TCP,
-#                         password from PGPASSWORD. This is what compose/ROSA use.
-FOCUS_PG_MODE = os.environ.get("FOCUS_PG_MODE", "docker")
-FOCUS_PG_CONTAINER = os.environ.get("FOCUS_PG_CONTAINER", "finops_pg")
-FOCUS_PG_HOST = os.environ.get("FOCUS_PG_HOST", "db")
-FOCUS_PG_PORT = os.environ.get("FOCUS_PG_PORT", "5432")
-FOCUS_PG_USER = os.environ.get("FOCUS_PG_USER", "focus_app")
-FOCUS_PG_DB = os.environ.get("FOCUS_PG_DB", "focus")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FOCUS_CSV = os.path.join(ROOT, "out", "normalizer", "focus_combined.csv")
@@ -49,65 +38,18 @@ MIQ_UTIL_JSON = os.environ.get(
 )
 
 
-def psql_argv(db: str = FOCUS_PG_DB, user: str = FOCUS_PG_USER) -> list[str]:
-    """Build the psql invocation prefix for the active connection mode.
-
-    Both modes feed the same `-c <sql>` and stdin downstream, so the rest of
-    the loader is mode-agnostic. \\COPY is client-side either way, so CSV
-    streaming over stdin works identically.
-    """
-    if FOCUS_PG_MODE == "network":
-        return [
-            "psql", "-h", FOCUS_PG_HOST, "-p", FOCUS_PG_PORT,
-            "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1",
-        ]
-    return [
-        "docker", "exec", "-i", FOCUS_PG_CONTAINER,
-        "psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1",
-    ]
+def _conn_kwargs() -> dict:
+    return {
+        "host":     os.environ.get("FOCUS_PG_HOST", "127.0.0.1"),
+        "port": int(os.environ.get("FOCUS_PG_PORT", "5432")),
+        "user":     os.environ.get("FOCUS_PG_USER", "focus_app"),
+        "password": os.environ.get("FOCUS_PG_PASS", os.environ.get("PGPASSWORD", "focus_app_demo")),
+        "dbname":   os.environ.get("FOCUS_PG_DB", "focus"),
+        "connect_timeout": 10,
+    }
 
 
-def run_psql(sql: str, db: str = FOCUS_PG_DB, user: str = FOCUS_PG_USER) -> str:
-    """Run a single SQL statement. Returns stdout."""
-    cmd = psql_argv(db, user) + ["-c", sql]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"psql failed (rc={proc.returncode})\n--- stderr ---\n{proc.stderr}"
-        )
-    return proc.stdout
-
-
-def copy_csv_to_table(csv_path: str, table: str, columns: list[str]) -> int:
-    """Stream a CSV file into a Postgres table via psql \\COPY (client-side)."""
-    col_list = ", ".join(columns)
-    sql = (
-        f"\\COPY {table} ({col_list}) "
-        f"FROM STDIN WITH (FORMAT csv, HEADER true, FORCE_NULL ({col_list}))"
-    )
-    cmd = psql_argv() + ["-c", sql]
-    with open(csv_path, "rb") as f:
-        proc = subprocess.run(cmd, stdin=f, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"\\COPY into {table} failed (rc={proc.returncode})\n"
-            f"--- stderr ---\n{proc.stderr}"
-        )
-    # psql prints "COPY <n>" to stdout
-    out = (proc.stdout or "").strip()
-    for line in out.splitlines():
-        if line.startswith("COPY "):
-            try:
-                return int(line.split()[1])
-            except (IndexError, ValueError):
-                pass
-    return 0
-
-
-# --- focus_costs loader ---
-
-# The focus_combined.csv has the FOCUS display names. Map them to our
-# snake_case schema columns, in the order the CSV provides them.
+# FOCUS display name -> focus_costs column.
 FOCUS_CSV_TO_DB_COLUMN = {
     "_source": "source",
     "BillingAccountId": "billing_account_id",
@@ -148,72 +90,6 @@ FOCUS_CSV_TO_DB_COLUMN = {
     "Tags": "tags",
 }
 
-
-def load_focus_costs() -> int:
-    """Rewrite the FOCUS CSV with DB-friendly column names + NULL handling, then COPY."""
-    # We need to transform the CSV: rename columns to snake_case, convert
-    # empty strings to NULL (Postgres COPY honors NULL '\N' or FORCE_NULL).
-    # Easier path: rewrite to a staging CSV.
-    from generators.common import FX_TO_USD  # reporting-currency FX (H-1)
-
-    staged = os.path.join(ROOT, "out", "db_staging_focus_costs.csv")
-    # Derived columns computed at load: normalize cost to USD so cross-
-    # provider SUMs are valid (H-1). Appended after the mapped columns.
-    derived_cols = ["billed_cost_usd", "fx_rate_to_usd"]
-    with open(FOCUS_CSV) as f, open(staged, "w", newline="") as g:
-        reader = csv.DictReader(f)
-        db_cols = [FOCUS_CSV_TO_DB_COLUMN[c] for c in reader.fieldnames if c in FOCUS_CSV_TO_DB_COLUMN]
-        all_cols = db_cols + derived_cols
-        writer = csv.DictWriter(g, fieldnames=all_cols)
-        writer.writeheader()
-        for row in reader:
-            out: dict[str, str] = {}
-            for csv_col, db_col in FOCUS_CSV_TO_DB_COLUMN.items():
-                if csv_col not in row:
-                    continue
-                v = row[csv_col]
-                if db_col == "tags" and not v:
-                    v = ""
-                out[db_col] = v
-            # --- currency normalization (H-1) ---
-            ccy = (row.get("BillingCurrency") or "").upper()
-            rate = FX_TO_USD.get(ccy)
-            raw = row.get("BilledCost") or ""
-            if rate is not None and raw not in ("", None):
-                try:
-                    out["billed_cost_usd"] = f"{float(raw) * rate:.6f}"
-                    out["fx_rate_to_usd"] = f"{rate:.8f}"
-                except ValueError:
-                    out["billed_cost_usd"] = ""
-                    out["fx_rate_to_usd"] = ""
-            else:
-                # Unknown currency: leave normalized blank rather than
-                # silently mis-summing. A NULL billed_cost_usd surfaces in
-                # the view as "unconvertible", not as zero.
-                out["billed_cost_usd"] = ""
-                out["fx_rate_to_usd"] = ""
-            writer.writerow(out)
-
-    # Client-side \COPY (no superuser needed). See GOTCHA D-4.
-    col_list = ", ".join(list(FOCUS_CSV_TO_DB_COLUMN.values()) + derived_cols)
-    sql = (
-        f"\\COPY focus_costs ({col_list}) "
-        f"FROM STDIN WITH (FORMAT csv, HEADER true, FORCE_NULL ({col_list}))"
-    )
-    cmd = psql_argv() + ["-c", sql]
-    with open(staged, "rb") as f:
-        proc = subprocess.run(cmd, stdin=f, capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"focus_costs \\COPY failed: {proc.stderr.decode()}")
-    out = (proc.stdout or b"").decode()
-    for line in out.splitlines():
-        if line.strip().startswith("COPY "):
-            return int(line.strip().split()[1])
-    return 0
-
-
-# --- resource_join_map loader ---
-
 JOIN_CSV_TO_DB_COLUMN = {
     "status": "status",
     "focus_source": "focus_source",
@@ -231,114 +107,173 @@ JOIN_CSV_TO_DB_COLUMN = {
 }
 
 
-def load_join_map() -> int:
-    staged = os.path.join(ROOT, "out", "db_staging_join_map.csv")
-    with open(JOIN_CSV) as f, open(staged, "w", newline="") as g:
-        reader = csv.DictReader(f)
-        db_cols = list(JOIN_CSV_TO_DB_COLUMN.values())
-        writer = csv.DictWriter(g, fieldnames=db_cols)
-        writer.writeheader()
-        for row in reader:
-            writer.writerow({JOIN_CSV_TO_DB_COLUMN[k]: row.get(k, "") for k in JOIN_CSV_TO_DB_COLUMN})
+def _to_utc_iso(value: str) -> str:
+    """Normalize a timestamp string to UTC ISO (GOTCHA H-8).
 
-    col_list = ", ".join(JOIN_CSV_TO_DB_COLUMN.values())
-    sql = (
-        f"\\COPY resource_join_map ({col_list}) "
-        f"FROM STDIN WITH (FORMAT csv, HEADER true, FORCE_NULL ({col_list}))"
-    )
-    cmd = psql_argv() + ["-c", sql]
-    with open(staged, "rb") as f:
-        proc = subprocess.run(cmd, stdin=f, capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"join_map \\COPY failed: {proc.stderr.decode()}")
-    out = (proc.stdout or b"").decode()
-    for line in out.splitlines():
-        if line.strip().startswith("COPY "):
-            return int(line.strip().split()[1])
-    return 0
+    Naive timestamps are assumed UTC (documented assumption); aware ones are
+    converted. Empty -> empty. Bad -> returned as-is (Postgres will reject,
+    surfacing the bad value rather than silently mis-bucketing)."""
+    if not value:
+        return ""
+    try:
+        d = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=dt.timezone.utc)
+    return d.astimezone(dt.timezone.utc).isoformat()
 
 
-# --- miq_utilization loader (JSON snapshot post-LM-1) ---
+def _idempotency_key(row: dict) -> str:
+    """Stable hash of identifying fields (GOTCHA H-6). Lets a future
+    incremental load upsert ON CONFLICT instead of duplicating."""
+    basis = "|".join(str(row.get(c, "")) for c in (
+        "_source", "BillingAccountId", "ResourceId", "SkuMeter",
+        "ChargePeriodStart", "ChargeDescription", "BilledCost",
+    ))
+    return hashlib.sha256(basis.encode()).hexdigest()
 
-def load_miq_utilization() -> int:
-    """Load metric_rollups from the JSON snapshot at MIQ_UTIL_JSON.
 
-    Originally this cross-DB-pulled from the appliance's vmdb_production
-    (GOTCHA J-3 pin on resource_type='VmOrTemplate' applied at extract).
-    LM-1 retired the appliance; join/miq_snapshot.py now synthesizes the
-    same data deterministically from generators/common.WORKLOADS, and we
-    just load that here.
-    """
-    with open(MIQ_UTIL_JSON) as f:
-        rows = json.load(f)
+def _build_focus_staging() -> tuple[io.StringIO, list[str]]:
+    """Transform focus_combined.csv into a COPY-ready buffer with derived
+    columns (H-1 currency, H-8 utc, H-9 extensions, H-6 idempotency)."""
+    from generators.common import FX_TO_USD
 
-    # Build a CSV in memory matching the table column order.
-    import io
+    derived = ["billed_cost_usd", "fx_rate_to_usd", "extensions", "idempotency_key"]
+    ts_cols = {"charge_period_start", "charge_period_end"}
     buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=[
-        "miq_vm_id", "timestamp", "capture_interval",
-        "cpu_usage_pct", "mem_usage_pct", "resource_name",
-    ])
+
+    with open(FOCUS_CSV) as f:
+        reader = csv.DictReader(f)
+        db_cols = [FOCUS_CSV_TO_DB_COLUMN[c] for c in reader.fieldnames if c in FOCUS_CSV_TO_DB_COLUMN]
+        all_cols = db_cols + derived
+        w = csv.DictWriter(buf, fieldnames=all_cols)
+        w.writeheader()
+        for row in reader:
+            out: dict[str, str] = {}
+            for csv_col, db_col in FOCUS_CSV_TO_DB_COLUMN.items():
+                if csv_col not in row:
+                    continue
+                v = row[csv_col]
+                if db_col in ts_cols:
+                    v = _to_utc_iso(v)        # H-8
+                out[db_col] = v
+
+            # H-1 currency normalization → USD
+            ccy = (row.get("BillingCurrency") or "").upper()
+            rate = FX_TO_USD.get(ccy)
+            raw = row.get("BilledCost") or ""
+            if rate is not None and raw not in ("", None):
+                try:
+                    out["billed_cost_usd"] = f"{Decimal(str(raw)) * Decimal(str(rate)):.6f}"
+                    out["fx_rate_to_usd"] = f"{rate:.8f}"
+                except (InvalidOperation, ValueError):
+                    out["billed_cost_usd"] = ""
+                    out["fx_rate_to_usd"] = ""
+            else:
+                out["billed_cost_usd"] = ""
+                out["fx_rate_to_usd"] = ""
+
+            # H-9 preserve provider extension columns into JSONB. The native
+            # adapter folded x_ columns into _extensions (JSON string); if a
+            # source predates that, fall back to scanning x_ columns directly.
+            ext_json = row.get("_extensions") or ""
+            if not ext_json:
+                ext = {k: row[k] for k in row if k.startswith("x_") and row[k] not in ("", None)}
+                ext_json = json.dumps(ext) if ext else ""
+            out["extensions"] = ext_json
+
+            # H-6 idempotency key
+            out["idempotency_key"] = _idempotency_key(row)
+
+            w.writerow(out)
+
+    buf.seek(0)
+    return buf, all_cols
+
+
+def _build_join_staging() -> tuple[io.StringIO, list[str]]:
+    buf = io.StringIO()
+    with open(JOIN_CSV) as f:
+        reader = csv.DictReader(f)
+        cols = list(JOIN_CSV_TO_DB_COLUMN.values())
+        w = csv.DictWriter(buf, fieldnames=cols)
+        w.writeheader()
+        for row in reader:
+            w.writerow({JOIN_CSV_TO_DB_COLUMN[k]: row.get(k, "") for k in JOIN_CSV_TO_DB_COLUMN})
+    buf.seek(0)
+    return buf, cols
+
+
+def _build_util_staging() -> tuple[io.StringIO, list[str]]:
+    cols = ["miq_vm_id", "timestamp", "capture_interval",
+            "cpu_usage_pct", "mem_usage_pct", "resource_name"]
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=cols)
     w.writeheader()
-    for r in rows:
-        w.writerow({k: r.get(k, "") for k in w.fieldnames})
-
-    cmd = psql_argv() + [
-        "-c",
-        "\\COPY miq_utilization "
-        "(miq_vm_id, timestamp, capture_interval, cpu_usage_pct, mem_usage_pct, resource_name) "
-        "FROM STDIN WITH (FORMAT csv, HEADER true)",
-    ]
-    proc = subprocess.run(cmd, input=buf.getvalue().encode(), capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"miq_utilization import failed: {proc.stderr.decode()}")
-    out = (proc.stdout or b"").decode()
-    for line in out.splitlines():
-        if line.strip().startswith("COPY "):
-            return int(line.strip().split()[1])
-    return 0
+    with open(MIQ_UTIL_JSON) as f:
+        for r in json.load(f):
+            row = dict(r)
+            row["timestamp"] = _to_utc_iso(row.get("timestamp", ""))   # H-8
+            w.writerow({k: row.get(k, "") for k in cols})
+    buf.seek(0)
+    return buf, cols
 
 
-# --- main ---
+def _copy(cur, table: str, cols: list[str], buf: io.StringIO,
+          force_null: bool = True) -> int:
+    """COPY a staging buffer into `table` (H-5 bulk path). FORCE_NULL turns
+    empty CSV fields into SQL NULL for the listed columns."""
+    col_sql = ", ".join(cols)
+    fn = f", FORCE_NULL ({col_sql})" if force_null else ""
+    cur.copy_expert(
+        f"COPY {table} ({col_sql}) FROM STDIN WITH (FORMAT csv, HEADER true{fn})",
+        buf,
+    )
+    return cur.rowcount
+
 
 def main() -> None:
     started = dt.datetime.now(dt.timezone.utc)
-    print(f"[loader] start at {started.isoformat()}")
+    print(f"[loader] start at {started.isoformat()} (psycopg2, single txn)")
 
-    # 1. truncate
-    print("[loader] truncating target tables...")
-    run_psql(
-        "TRUNCATE focus_costs, resource_join_map, miq_utilization, miq_onprem_cost "
-        "RESTART IDENTITY"
-    )
+    focus_buf, focus_cols = _build_focus_staging()
+    join_buf, join_cols = _build_join_staging()
+    util_buf, util_cols = _build_util_staging()
 
-    # 2. focus_costs
-    print("[loader] loading focus_costs from", FOCUS_CSV)
-    n_focus = load_focus_costs()
+    conn = psycopg2.connect(**_conn_kwargs())
+    try:
+        conn.autocommit = False          # H-4: one transaction
+        with conn.cursor() as cur:
+            cur.execute(
+                "TRUNCATE focus_costs, resource_join_map, miq_utilization, "
+                "miq_onprem_cost RESTART IDENTITY"
+            )
+            n_focus = _copy(cur, "focus_costs", focus_cols, focus_buf)
+            n_join = _copy(cur, "resource_join_map", join_cols, join_buf)
+            # util has no nullable empties to force; keep FORCE_NULL off
+            n_util = _copy(cur, "miq_utilization", util_cols, util_buf, force_null=False)
+
+            finished = dt.datetime.now(dt.timezone.utc)
+            cur.execute(
+                "INSERT INTO load_metadata "
+                "(started_at, finished_at, focus_rows_loaded, join_rows_loaded, "
+                " miq_util_rows_loaded, miq_onprem_rows_loaded, notes) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (started, finished, n_focus, n_join, n_util, 0,
+                 "psycopg2 single-txn load; onprem loaded separately"),
+            )
+        conn.commit()                    # H-4: all-or-nothing
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
     print(f"[loader] focus_costs: {n_focus} rows")
-
-    # 3. resource_join_map
-    print("[loader] loading resource_join_map from", JOIN_CSV)
-    n_join = load_join_map()
     print(f"[loader] resource_join_map: {n_join} rows")
-
-    # 4. miq_utilization
-    print(f"[loader] loading miq_utilization from {MIQ_UTIL_JSON}")
-    n_util = load_miq_utilization()
     print(f"[loader] miq_utilization: {n_util} rows")
-
-    # 5. metadata
-    finished = dt.datetime.now(dt.timezone.utc)
-    run_psql(
-        "INSERT INTO load_metadata "
-        "(started_at, finished_at, focus_rows_loaded, join_rows_loaded, "
-        " miq_util_rows_loaded, miq_onprem_rows_loaded, notes) "
-        f"VALUES ('{started.isoformat()}', '{finished.isoformat()}', "
-        f"{n_focus}, {n_join}, {n_util}, 0, "
-        "'slice 4 PoC load; miq_onprem deferred to slice 6')"
-    )
-
-    print(f"[loader] done in {(finished - started).total_seconds():.2f}s")
+    print(f"[loader] committed in {(finished - started).total_seconds():.2f}s")
 
 
 if __name__ == "__main__":

@@ -91,49 +91,52 @@ def compute_rows(reference: dt.date | None = None) -> list[dict]:
 
 
 def load_into_postgres(
-    container: str = "finops_pg",  # retained for back-compat; ignored in network mode
+    container: str = "finops_pg",  # retained for signature back-compat; unused
     user: str = "focus_app",
     db: str = "focus",
 ) -> int:
-    """Truncate + reload focus.miq_onprem_cost from compute_rows().
+    """Truncate + reload miq_onprem_cost via psycopg2 in one transaction.
 
-    Reuses db.loader.psql_argv() so the connection mode (docker exec for
-    local dev, network psql for containers/prod) is decided in one place.
+    Uses db.loader's connection settings + COPY helper so the on-prem load
+    shares the same psycopg2 path as the main loader (GOTCHA H-4/H-5) — no
+    psql shell-out.
     """
     import csv, io
-    from db.loader import psql_argv  # single source of connection-mode truth
+    import psycopg2
+    from db.loader import _conn_kwargs, _copy
 
     rows = compute_rows()
-    buf = io.StringIO()
     cols = [
         "miq_vm_id", "charge_period_start", "charge_period_end",
         "chargeback_rate_id", "billed_cost", "billing_currency",
         "service_category", "service_name", "sub_account_id", "notes",
     ]
+    buf = io.StringIO()
     w = csv.DictWriter(buf, fieldnames=cols)
     w.writeheader()
     for r in rows:
         w.writerow({k: ("" if r[k] is None else r[k]) for k in cols})
+    buf.seek(0)
 
-    subprocess.run(
-        psql_argv(db=db, user=user) + ["-c", "TRUNCATE miq_onprem_cost RESTART IDENTITY"],
-        check=True, capture_output=True,
-    )
-    proc = subprocess.run(
-        psql_argv(db=db, user=user) + [
-            "-c",
-            f"\\COPY miq_onprem_cost ({', '.join(cols)}) "
-            f"FROM STDIN WITH (FORMAT csv, HEADER true, "
-            f"FORCE_NULL (chargeback_rate_id))"],
-        input=buf.getvalue().encode(), capture_output=True,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.decode())
-    out = (proc.stdout or b"").decode()
-    for line in out.splitlines():
-        if line.strip().startswith("COPY "):
-            return int(line.strip().split()[1])
-    return 0
+    conn = psycopg2.connect(**_conn_kwargs())
+    try:
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE miq_onprem_cost RESTART IDENTITY")
+            # only chargeback_rate_id is nullable-empty here
+            cur.copy_expert(
+                f"COPY miq_onprem_cost ({', '.join(cols)}) FROM STDIN "
+                f"WITH (FORMAT csv, HEADER true, FORCE_NULL (chargeback_rate_id))",
+                buf,
+            )
+            n = cur.rowcount
+        conn.commit()
+        return n
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

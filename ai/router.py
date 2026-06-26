@@ -94,5 +94,6 @@ def ask(body: dict[str, Any]) -> dict:
         "sql": answer.sql,
         "rows": answer.rows,
         "raw_text": answer.raw_text,
+        "warnings": answer.warnings or [],   # H-10 financial-sanity flags
         "refused": False,
     }

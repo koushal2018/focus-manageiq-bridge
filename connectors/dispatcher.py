@@ -67,7 +67,9 @@ def run() -> dict:
     # Write the combined FOCUS CSV — identical shape to the PoC normalizer
     # output, so db/loader.py consumes it unchanged.
     os.makedirs(OUT_DIR, exist_ok=True)
-    columns = ["_source"] + focus_spec.FOCUS_COLUMNS_V1_3
+    # Carry _extensions (provider x_ columns folded to JSON by the native
+    # adapter, H-9) through to the loader.
+    columns = ["_source"] + focus_spec.FOCUS_COLUMNS_V1_3 + ["_extensions"]
     with open(FOCUS_CSV, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()

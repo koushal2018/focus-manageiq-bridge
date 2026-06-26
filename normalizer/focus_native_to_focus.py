@@ -34,14 +34,18 @@ def map_row(row: dict[str, str]) -> tuple[dict[str, object], list[str]]:
     """Project a native-FOCUS row onto the target FOCUS column set."""
     warnings: list[str] = []
 
-    # Drop x_ provider extensions (H-9), note which were present.
-    x_cols = [k for k in row if k.startswith("x_")]
-    if x_cols:
-        warnings.append(f"dropped provider extension columns: {sorted(x_cols)}")
-
     out: dict[str, object] = {}
     for col in TARGET_COLUMNS:
         out[col] = row.get(col, "")
+
+    # PRESERVE x_ provider extension columns (H-9) into _extensions so the
+    # dispatcher + loader can persist them into the focus_costs.extensions
+    # JSONB. Portable-FOCUS consumers ignore the column; provider-specific
+    # analysis (e.g. AWS x_Discounts) can read it.
+    x_cols = {k: row[k] for k in row if k.startswith("x_") and row[k] not in ("", None)}
+    if x_cols:
+        import json as _json
+        out["_extensions"] = _json.dumps(x_cols, separators=(",", ":"))
 
     # ServiceCategory conformance (F-2): mandatory, closed set.
     cat = (out.get("ServiceCategory") or "").strip()

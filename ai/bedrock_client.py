@@ -50,6 +50,8 @@ Schema (all tables are read-only; FOCUS v1.3 column names in snake_case):
     billing_period_end, charge_period_start, charge_period_end,
     charge_category, charge_description, charge_frequency,
     billed_cost, effective_cost, list_cost, contracted_cost,
+    billed_cost_usd,   -- USD-normalized; ALWAYS use this for any SUM/total
+                       -- across providers. billed_cost mixes AED and USD.
     billing_currency, pricing_currency,
     service_provider_name, invoice_issuer_name,
     service_category, service_subcategory, service_name,
@@ -92,6 +94,8 @@ Strict rules:
      MUST respond with the literal SQL: SELECT 'refused' AS result
   5. Do not invent columns. If the user's question can't be answered from
      the schema above, respond with: SELECT 'no answer' AS result
+  6. For ANY cost total/sum/average across providers, use billed_cost_usd
+     (USD-normalized). Never SUM billed_cost directly — it mixes currencies.
 """
 
 
@@ -106,6 +110,7 @@ class BedrockAnswer:
     sql: str
     rows: list[dict]
     raw_text: str
+    warnings: list[str] = None  # financial-sanity flags (H-10), may be empty
 
 
 class BedrockDisabled(RuntimeError):
@@ -172,7 +177,10 @@ def ask_bedrock(question: str) -> BedrockAnswer:
     # FAIL CLOSED on anything else the model managed to emit.
     sql_guard.validate(sql)  # raises SqlValidationError on reject
 
+    # Financial-sanity flags (H-10) — valid SQL can still be a wrong number.
+    warnings = sql_guard.financial_sanity_warnings(sql)
+
     # Execute via the read-only path
     from web import db
     rows = db.query(sql)
-    return BedrockAnswer(sql=sql, rows=rows, raw_text=raw)
+    return BedrockAnswer(sql=sql, rows=rows, raw_text=raw, warnings=warnings)
