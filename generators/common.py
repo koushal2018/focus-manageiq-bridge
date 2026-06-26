@@ -224,9 +224,60 @@ AZURE_REGIONS = ["uaenorth", "westeurope"]
 OCI_REGIONS = ["me-dubai-1", "eu-frankfurt-1"]
 
 
+# MIQ inventory VM ids are assigned deterministically starting here. The
+# seed (miq_vmdb_seed / miq_snapshot) emits one vm per workload, plus a
+# SECOND vm for any workload present on both AWS and Azure (cross-cloud:
+# each provider's inventory sees its own instance).
+DEMO_VM_ID_START = 90_001
+
+
+def workload_vm_ids() -> dict[str, list[int]]:
+    """Canonical {workload canonical_name -> [vm_id, ...]} mapping.
+
+    SINGLE SOURCE OF TRUTH for the workload→VM-id assignment (GOTCHA H-2).
+    miq_snapshot, onprem.cost_model, and web.queries all import this rather
+    than re-deriving the counter independently — reordering WORKLOADS or
+    changing the cross-cloud rule now updates every consumer at once.
+    """
+    out: dict[str, list[int]] = {}
+    vm_id = DEMO_VM_ID_START
+    for wl in WORKLOADS:
+        ids = [vm_id]
+        vm_id += 1
+        if wl.aws_instance_id and wl.azure_resource_id:
+            ids.append(vm_id)   # cross-cloud workload: second inventory row
+            vm_id += 1
+        out[wl.canonical_name] = ids
+    return out
+
+
 def usd_to_aed(usd: float) -> float:
     """Pinned FX. Real ENBD will need a live FX feed --- a gotcha for later."""
     return round(usd * USD_TO_AED, 6)
+
+
+# Reporting currency = USD (the clouds' native invoice currency; AED is
+# pegged to USD so the choice is informationally neutral, and USD avoids
+# inflating token-level costs). FX rates convert any source currency → USD.
+# Pegged constants for the PoC; production reads a dated FX feed and records
+# the rate+date per row (H-1).
+REPORTING_CURRENCY = "USD"
+FX_TO_USD = {
+    "USD": 1.0,
+    "AED": 1.0 / USD_TO_AED,   # AED pegged at 3.6725/USD
+}
+
+
+def to_usd(amount: float, currency: str) -> float:
+    """Convert a monetary amount in `currency` to USD (reporting currency).
+
+    Normalizes cross-provider costs before any SUM (GOTCHA H-1 — never add
+    AED to USD). Unknown currency raises rather than silently mis-summing.
+    """
+    rate = FX_TO_USD.get((currency or "").upper())
+    if rate is None:
+        raise ValueError(f"no FX rate to USD for currency {currency!r}")
+    return round(float(amount) * rate, 6)
 
 
 def make_rng() -> random.Random:

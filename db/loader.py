@@ -154,11 +154,17 @@ def load_focus_costs() -> int:
     # We need to transform the CSV: rename columns to snake_case, convert
     # empty strings to NULL (Postgres COPY honors NULL '\N' or FORCE_NULL).
     # Easier path: rewrite to a staging CSV.
+    from generators.common import FX_TO_USD  # reporting-currency FX (H-1)
+
     staged = os.path.join(ROOT, "out", "db_staging_focus_costs.csv")
+    # Derived columns computed at load: normalize cost to USD so cross-
+    # provider SUMs are valid (H-1). Appended after the mapped columns.
+    derived_cols = ["billed_cost_usd", "fx_rate_to_usd"]
     with open(FOCUS_CSV) as f, open(staged, "w", newline="") as g:
         reader = csv.DictReader(f)
         db_cols = [FOCUS_CSV_TO_DB_COLUMN[c] for c in reader.fieldnames if c in FOCUS_CSV_TO_DB_COLUMN]
-        writer = csv.DictWriter(g, fieldnames=db_cols)
+        all_cols = db_cols + derived_cols
+        writer = csv.DictWriter(g, fieldnames=all_cols)
         writer.writeheader()
         for row in reader:
             out: dict[str, str] = {}
@@ -166,18 +172,30 @@ def load_focus_costs() -> int:
                 if csv_col not in row:
                     continue
                 v = row[csv_col]
-                # Empty Tags -> NULL JSON
                 if db_col == "tags" and not v:
                     v = ""
                 out[db_col] = v
+            # --- currency normalization (H-1) ---
+            ccy = (row.get("BillingCurrency") or "").upper()
+            rate = FX_TO_USD.get(ccy)
+            raw = row.get("BilledCost") or ""
+            if rate is not None and raw not in ("", None):
+                try:
+                    out["billed_cost_usd"] = f"{float(raw) * rate:.6f}"
+                    out["fx_rate_to_usd"] = f"{rate:.8f}"
+                except ValueError:
+                    out["billed_cost_usd"] = ""
+                    out["fx_rate_to_usd"] = ""
+            else:
+                # Unknown currency: leave normalized blank rather than
+                # silently mis-summing. A NULL billed_cost_usd surfaces in
+                # the view as "unconvertible", not as zero.
+                out["billed_cost_usd"] = ""
+                out["fx_rate_to_usd"] = ""
             writer.writerow(out)
 
-    # Push staged file into the container, then \COPY from there. We need
-    # the file inside the container because Postgres COPY runs server-side
-    # and docker exec stdin would require client-side \COPY anyway. Use
-    # docker cp.
     # Client-side \COPY (no superuser needed). See GOTCHA D-4.
-    col_list = ", ".join(FOCUS_CSV_TO_DB_COLUMN.values())
+    col_list = ", ".join(list(FOCUS_CSV_TO_DB_COLUMN.values()) + derived_cols)
     sql = (
         f"\\COPY focus_costs ({col_list}) "
         f"FROM STDIN WITH (FORMAT csv, HEADER true, FORCE_NULL ({col_list}))"

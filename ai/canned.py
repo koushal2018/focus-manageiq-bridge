@@ -29,26 +29,24 @@ QUERIES: dict[str, CannedQuery] = {
         description="Total AI/ML cost grouped by cloud provider.",
         sql="""
             SELECT service_provider_name,
-                   SUM(billed_cost)::NUMERIC(12,2) AS total,
-                   billing_currency
+                   SUM(billed_cost_usd)::NUMERIC(12,2) AS total_usd
             FROM   focus_costs
             WHERE  service_category = 'AI and Machine Learning'
-            GROUP  BY service_provider_name, billing_currency
-            ORDER  BY total DESC
+            GROUP  BY service_provider_name
+            ORDER  BY total_usd DESC
         """,
     ),
     "ai_cost_by_model": CannedQuery(
         name="ai_cost_by_model",
-        description="AI/ML cost grouped by the model id captured in SkuMeter.",
+        description="AI/ML cost (USD) grouped by the model id captured in SkuMeter.",
         sql="""
             SELECT service_provider_name,
                    sku_meter,
-                   SUM(billed_cost)::NUMERIC(12,4) AS total,
-                   billing_currency
+                   SUM(billed_cost_usd)::NUMERIC(12,4) AS total_usd
             FROM   focus_costs
             WHERE  service_category = 'AI and Machine Learning'
-            GROUP  BY service_provider_name, sku_meter, billing_currency
-            ORDER  BY total DESC
+            GROUP  BY service_provider_name, sku_meter
+            ORDER  BY total_usd DESC
         """,
     ),
     "top_n_costly_workloads": CannedQuery(

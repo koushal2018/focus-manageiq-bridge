@@ -51,7 +51,12 @@ CREATE TABLE focus_costs (
     charge_category         TEXT,                          -- ChargeCategory
     charge_description      TEXT,                          -- ChargeDescription
     charge_frequency        TEXT,                          -- ChargeFrequency
-    billed_cost             NUMERIC(20,6),                 -- BilledCost
+    billed_cost             NUMERIC(20,6),                 -- BilledCost (in billing_currency)
+    -- Normalized to a single reporting currency (USD) at load via a recorded
+    -- FX rate, so cross-provider SUMs are valid (GOTCHA H-1). Never SUM
+    -- billed_cost across providers directly — it mixes AED and USD.
+    billed_cost_usd         NUMERIC(20,6),
+    fx_rate_to_usd          NUMERIC(18,8),                 -- rate used (audit)
     effective_cost          NUMERIC(20,6),                 -- EffectiveCost
     list_cost               NUMERIC(20,6),                 -- ListCost
     contracted_cost         NUMERIC(20,6),                 -- ContractedCost

@@ -105,6 +105,68 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 
 ## (Reserve sections — fill as we hit them)
 
+## 🟢 BIG FINDING — the hyperscalers now export FOCUS natively
+
+### NF-1. AWS, Azure, and OCI all ship native FOCUS exports — verified against focus.finops.org provider registry (2026-06-26)
+- **What:** Confirmed via the focus-finops MCP `get_provider` for each:
+  - **AWS** — FOCUS **1.2**, GA November 2025. "Create a FOCUS Data Export" in the Billing & Cost Management console (Data Exports). Publishes a FOCUS 1.2 data dictionary + a conformance-gap report.
+  - **Azure** — FOCUS **1.2**, dedicated FOCUS export in Cost Management, 7 years history, Power BI + Microsoft Fabric, conformance summary.
+  - **OCI** — FOCUS **1.0**, "FOCUS Reports" folder under Cost & Usage Reports; prebuilt-function converter for history.
+- **Why it matters — reframes the engagement:** the PoC's `normalizer/` maps *provider-native* formats (CUR / cost-export / usage-report) → FOCUS. For CURRENT data ENBD does NOT need to build that — they enable the native FOCUS export in each console. The hard problem the PoC de-risked (per-provider mapping) is now largely a *configuration* step at the source. Good news for ENBD: less to build, vendor-maintained conformance.
+- **What still needs building (the real value, unchanged):**
+  1. **Cross-provider join to ManageIQ** (J-1) — FOCUS exports carry no utilization or on-prem identity; the asymmetric `uid_ems`/`ems_ref` join is still the hard part.
+  2. **Conformance-gap + version skew** — AWS/Azure are 1.2, OCI is 1.0; each has documented gaps. The normalizer's role shifts from "map to FOCUS" to "level near-FOCUS feeds to one version + fill gaps."
+  3. **On-prem** (ManageIQ) — no native FOCUS; still needs the recharge model.
+- **EBA action:** Add native-FOCUS source types (`aws-focus-export`, etc.) whose `normalize()` is near-identity + version-leveling + gap-fill. Keep the CUR/cost-export adapters for HISTORICAL data predating native exports. Tell ENBD plainly: "turn on FOCUS export in three consoles; we own the join, version-leveling, gap-fill, and on-prem."
+
+### NF-2. The PoC generators emit provider-NATIVE shapes, NOT real FOCUS exports, and were not validated against any real provider export
+- **What:** `generators/` produces AWS CUR / Azure cost-export / OCI usage-report shapes from model knowledge of those formats. Never validated against a real export; and per NF-1 they model the *pre-FOCUS-native* path.
+- **Why it matters:** (a) column names are illustrative, not diffed against the providers' published data dictionaries; (b) the providers' *native FOCUS* exports look different from these *native-billing* formats — closer to the destination. Demoing CUR→FOCUS as "what ENBD needs" overstates the work now that native FOCUS exists.
+- **EBA action:** Before pilot, run ONE real AWS FOCUS 1.2 export through a native-FOCUS adapter and diff against the data dictionary — ground truth over guesswork. Synthetic generators stay as CI fixtures + the join teaching path.
+
+## Hardening / known sharp edges (sparring review 2026-06-26)
+
+### H-1. Cross-provider cost SUM mixes currencies — AED + USD added together is meaningless (FIXED)
+- **What:** Azure rows carry `BilledCost` in AED; AWS/OCI in USD. Views did `SUM(billed_cost)` across providers, literally adding dirhams to dollars. The AI-by-provider result showed `3.12 AED` next to `1.85 USD` in one set.
+- **Why it matters:** A finance audience catches this instantly; it reads as "they don't understand the data." FOCUS ships `BillingCurrency` precisely because you must convert or group-by — never blind-sum.
+- **Fix applied:** loader computes a normalized `billed_cost_aed` (single reporting currency = AED) at load time using a recorded FX rate; views sum that column and label totals "AED (normalized)". Per-currency originals retained for audit. Real production uses a dated FX feed, not the pegged constant (documented).
+
+### H-2. Triplicated VM-ID derivation — silent mis-attribution risk (FIXED)
+- **What:** `miq_snapshot.py`, `onprem/cost_model.py`, `web/queries.py` each independently looped `WORKLOADS` and incremented `vm_id` from 90001 with bespoke cross-cloud "+1" logic. Reorder/insert a workload → on-prem cost attaches to the WRONG VM, no error.
+- **Fix applied:** one `common.workload_vm_ids()` returns the canonical {canonical_name → [vm_ids]} map; the three call sites import it. Single source of truth.
+
+### H-3. Join is exact-string-equality — real-world casing/format variance returns silent zero-matches (OPEN)
+- **What:** `ResourceId == uid_ems`/`ems_ref` exact match. Real Azure ARM paths differ in case (case-preserving, case-insensitive); AWS ARNs vary bare-id vs full-ARN; whitespace/Unicode. One mismatch → workload silently lands in `unmatched_focus_only`, wrong attribution shown as fact.
+- **EBA action:** canonicalize per provider before compare (case-fold ARM paths, normalize ARN form, strip/NFC). Add a secondary fuzzy key (name+account+region) as fallback and FLAG fuzzy matches rather than trusting them.
+
+### H-4. No transaction boundary across the multi-table load (OPEN)
+- **What:** loader truncates+loads each table in separate `psql` calls. A mid-load failure leaves a torn snapshot (new focus rows, empty util) that the dashboard serves.
+- **EBA action:** load to staging tables, swap in one transaction; or wrap the whole reload in a single transaction via a real connection.
+
+### H-5. `psql` shell-out doesn't scale and invites injection (OPEN)
+- **What:** loader builds SQL as strings and spawns `psql` per statement. Fine at 300 rows, catastrophic at millions; non-`\COPY` statements that interpolate data are an injection surface.
+- **EBA action:** psycopg2 + parameterized queries + `COPY FROM STDIN` over one connection (web/db.py already uses psycopg2 — converge on it). Retire the dual psql path (P-6) in production.
+
+### H-6. No idempotency key on the native-FOCUS load — re-running double-counts (OPEN)
+- **What:** FOCUS has no mandated unique row id. The dispatcher re-run appends; there's no "already loaded this export" guard. Re-running doubles rows.
+- **EBA action:** idempotency key = (export-id + row-hash) or a provider-supplied invoice/line id; upsert or skip-seen. Required before any scheduled/retryable load.
+
+### H-7. Money handled as Python float in the join aggregation (OPEN)
+- **What:** `focus_billed_cost_sum` is summed as float; money must be Decimal/NUMERIC end-to-end or it drifts.
+- **EBA action:** keep monetary values Decimal in Python, NUMERIC in SQL; never float.
+
+### H-8. Timezone assumed UTC for all providers (OPEN)
+- **What:** AWS CUR is UTC; Azure exports are often local billing tz; OCI varies. Cross-provider month-boundary bucketing without tz normalization mis-buckets.
+- **EBA action:** normalize all ChargePeriod timestamps to UTC at load; record source tz.
+
+### H-9. `x_` provider-extension columns are dropped at load (OPEN)
+- **What:** native-FOCUS exports carry `x_Discounts` etc.; the loader maps only the known FOCUS columns, silently discarding `x_*` (incl. AWS discount data).
+- **EBA action:** decide per column — preserve high-value ones (`x_Discounts`) into dedicated columns or a JSONB `extensions` blob; document what's dropped.
+
+### H-10. Bedrock guardrail blocks injection, not wrong answers (OPEN)
+- **What:** `sql_guard` ensures read-only + allowlisted tables, but the LLM can still emit a valid query that's financially wrong (e.g. SUM across currencies — H-1, or a fan-out join that multi-counts).
+- **EBA action:** for financial figures prefer canned queries; add result-sanity checks (single currency in a SUM, row-count bounds). "Confidently wrong total" is the SPEC §0 nightmare and the guardrail does not catch it.
+
 ## Customer comprehension
 
 ### CX-1. The FOCUS `Allocated*` columns are NOT a "source→FOCUS mapping" surface — they describe internal cost-allocation

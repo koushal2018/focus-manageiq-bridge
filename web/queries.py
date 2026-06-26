@@ -16,16 +16,18 @@ from web import db
 # Bedrock model id was pushed into sku_meter by aws_to_focus.py so we
 # can group on it; for Azure OpenAI the meter id is the Azure MeterName.
 def ai_cost_by_model() -> list[dict]:
+    # SUM the USD-normalized column (H-1) — never raw billed_cost, which
+    # mixes AED and USD across providers.
     sql = """
         SELECT  service_provider_name,
                 sku_meter,
                 service_name,
-                COUNT(*)         AS row_count,
-                SUM(billed_cost) AS total_cost,
-                billing_currency
+                COUNT(*)             AS row_count,
+                SUM(billed_cost_usd) AS total_cost,
+                'USD'                AS billing_currency
         FROM    focus_costs
         WHERE   service_category = 'AI and Machine Learning'
-        GROUP BY service_provider_name, sku_meter, service_name, billing_currency
+        GROUP BY service_provider_name, sku_meter, service_name
         ORDER BY total_cost DESC
     """
     return db.query(sql)
@@ -62,14 +64,17 @@ def utilization_x_cost() -> list[dict]:
 
 
 def cloud_cost_by_provider() -> list[dict]:
+    # USD-normalized SUM (H-1). billing_currency shows the SOURCE currency
+    # for transparency, but the total is always USD.
     sql = """
         SELECT  service_provider_name,
                 source,
-                COUNT(*)                                 AS row_count,
-                SUM(billed_cost)::NUMERIC(12,2)          AS total_cost,
-                billing_currency
+                COUNT(*)                              AS row_count,
+                SUM(billed_cost_usd)::NUMERIC(12,2)   AS total_cost,
+                MAX(billing_currency)                 AS source_currency,
+                'USD'                                 AS billing_currency
         FROM    focus_costs
-        GROUP BY service_provider_name, source, billing_currency
+        GROUP BY service_provider_name, source
         ORDER BY total_cost DESC
     """
     return db.query(sql)
@@ -104,14 +109,14 @@ def onprem_cost_estimate() -> list[dict]:
         ORDER  BY billed_cost DESC
     """)
 
-    # Map miq_vm_id back to a canonical workload to enrich
-    vm_id = 90_001
+    # Map miq_vm_id back to a canonical workload via the canonical id map
+    # (GOTCHA H-2 — single source of truth, no re-derived counter).
     id_to_workload: dict[int, gen_common.Workload] = {}
-    for wl in gen_common.WORKLOADS:
-        id_to_workload[vm_id] = wl
-        vm_id += 1
-        if wl.aws_instance_id and wl.azure_resource_id:
-            vm_id += 1
+    _id_map = gen_common.workload_vm_ids()
+    _by_name = {w.canonical_name: w for w in gen_common.WORKLOADS}
+    for name, ids in _id_map.items():
+        for vid in ids:
+            id_to_workload[vid] = _by_name[name]
 
     out = []
     for r in persisted:

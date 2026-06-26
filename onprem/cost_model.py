@@ -55,17 +55,9 @@ def compute_rows(reference: dt.date | None = None) -> list[dict]:
     reference = reference or REFERENCE_DATE
     period_start, period_end = _last_full_month(reference)
 
-    # MIQ-side IDs were assigned during the slice-1 seed. We mirror the same
-    # sequence here so the resource_join_map's unmatched_miq_only rows match
-    # this output by name.
-    vm_id_for: dict[str, int] = {}
-    vm_id = 90_001
-    for wl in common.WORKLOADS:
-        vm_id_for[wl.canonical_name] = vm_id
-        vm_id += 1
-        if wl.aws_instance_id and wl.azure_resource_id:
-            # cross-cloud workload claims two MIQ ids
-            vm_id += 1
+    # VM-id assignment comes from the canonical map (GOTCHA H-2) so on-prem
+    # rows attach to the same VM ids the join map + snapshot use.
+    vm_id_for = common.workload_vm_ids()
 
     rows: list[dict] = []
     for wl in common.WORKLOADS:
@@ -77,7 +69,7 @@ def compute_rows(reference: dt.date | None = None) -> list[dict]:
             + RATE_MEM_USD_PER_GB_MONTH * gb
         )
         rows.append({
-            "miq_vm_id": vm_id_for[wl.canonical_name],
+            "miq_vm_id": vm_id_for[wl.canonical_name][0],
             "charge_period_start": period_start.isoformat(),
             "charge_period_end": period_end.isoformat(),
             # No chargeback_rate_id yet --- slice 6 successor wiring would
