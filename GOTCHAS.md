@@ -141,6 +141,29 @@ _(nothing yet — start with Azure per SPEC §2)_
 - **Why it matters:** Joins against rollups need `resource_type='VmOrTemplate' AND resource_id=vms.id`. Skipping the type predicate joins against Hosts and Containers too and double-counts.
 - **EBA action:** Always pin `resource_type` in utilization joins.
 
+## Postgres / data layer
+
+### D-1. Sharing the appliance's Postgres server violates SPEC §2's portability invariant — we did it anyway for the PoC, with an exit ramp
+- **What:** Slice 4 puts the PoC's `focus` database into the *same Postgres server* that runs ManageIQ's `vmdb_production`. The connection point is the appliance's port 5432. This is a deliberate shortcut: one fewer container, one fewer credential surface, and we get a real-Postgres target without standing up a new docker-compose service.
+- **Why it matters:** SPEC §2 mandates portability — the data layer must run on-prem OR AWS, untangled from ManageIQ. Co-locating with `vmdb_production` couples our schema to whatever Postgres version the appliance ships, and an `apt upgrade` of ManageIQ could break us. It also means a `docker rm manageiq_appliance` deletes our cost data.
+- **EBA action (day 1 of the sprint):** Split the FOCUS DB into its own container. The `db/` directory's schema.sql is portable as-is; only the connection string changes. The loader honors `FOCUS_PGHOST` / `FOCUS_PGPORT` / `FOCUS_PGUSER` / `FOCUS_PGPASS` env vars so the move is a config change, not a code change.
+- **Recovery cost if you forget:** zero — the schema and data are throwaway. The risk is silent coupling getting reproduced in the EBA team's first real build.
+
+### D-2. `psql -c "CREATE DATABASE ..."` fails inside a multi-statement block: "CREATE DATABASE cannot run inside a transaction block"
+- **What:** When you feed `psql` a string with multiple semicolons via `-c`, psql wraps the whole thing in an implicit transaction. `CREATE DATABASE`, `CREATE TABLESPACE`, `REINDEX DATABASE`, and a few others are non-transactional and refuse. The error doesn't mention `-c`'s wrapping behavior — it just says "transaction block," which is misleading.
+- **Why it matters:** Standard "set up the DB" scripts hit this. The fix is one statement per `-c` call (auto-commit), OR a `.sql` file with `-f` and no enclosing BEGIN/COMMIT.
+- **EBA action:** Setup scripts that need both role and DB creation should use multiple `psql -c` invocations (one per DDL statement), or `psql -f script.sql` with no transaction wrapper for the CREATE DATABASE line.
+
+### D-4. `COPY FROM file` requires Postgres superuser; use `\COPY` from psql instead
+- **What:** First attempt at loading `focus_costs` failed with `ERROR: must be superuser or a member of the pg_read_server_files role to COPY from a file`. This is server-side COPY, which reads files from the Postgres server's filesystem and is privileged. The `pg_read_server_files` role is exactly what its name implies and you don't want to grant it to a workload user.
+- **Why it matters:** psql's lowercase `copy` and SQL's uppercase `COPY` look identical at a glance, but psql's backslash command `\COPY` (note the backslash) is a CLIENT-side operation that streams the file via STDIN — any user with INSERT privilege on the target table can run it. The error message hints at `\copy` but easy to miss.
+- **EBA action:** Use `\COPY` (psql client-side) for all loader paths. Reserve `COPY FROM file` for admin scripts running as `postgres`. The loader in `db/loader.py` does this; preserve the pattern.
+
+### D-3. Appliance Postgres is not port-mapped to the host
+- **What:** `docker inspect manageiq_appliance` shows port 443 mapped (the HTTPS API), 3000 and 4000 left unmapped, and no entry for 5432. Inside the container, Postgres listens on 0.0.0.0:5432 — but the host can't reach it.
+- **Why it matters:** The loader needs to talk to Postgres. Two paths: (a) `docker exec manageiq_appliance psql -U focus_app -d focus -f script.sql`, which works but requires docker access on the host running the loader; (b) re-create the appliance container with `-p 5432:5432`, but the appliance image likely doesn't expose 5432 in its Dockerfile so this needs explicit configuration.
+- **EBA action:** For the PoC, the loader uses `docker exec` (path a). For production, run the FOCUS DB in its own container per D-1 — at which point this gotcha evaporates.
+
 ## On-prem cost / chargeback
 _(see G-5; more once we wire the join to rates)_
 
