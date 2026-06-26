@@ -55,6 +55,10 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=finops:finops . .
 
+# Writable artifact dir for the seed pipeline (generators/dispatcher write
+# CSVs + JSON here). .dockerignore excludes the host's out/, so create it.
+RUN mkdir -p /app/out && chown -R finops:finops /app/out
+
 # Drop privileges.
 USER finops
 

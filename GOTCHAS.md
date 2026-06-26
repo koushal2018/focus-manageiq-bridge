@@ -324,6 +324,16 @@ _(nothing yet — start with Azure per SPEC §2)_
   ```
   Needs `httpx` installed (TestClient dependency). For an actual demo the operator runs uvicorn/gunicorn in a normal shell or container where backgrounding works.
 
+### P-6. Two psql connection modes — `docker exec` (dev) vs network `psql -h` (container) — behind one env switch
+- **What:** The loader + on-prem model originally shelled out via `docker exec -i finops_pg psql` (local dev convenience, D-3). Inside a container talking to a *separate* Postgres service there's no docker socket and the target host is `db`, not `finops_pg`. Rather than fork the code or adopt psycopg2 in the loader, both honor `FOCUS_PG_MODE`: `docker` (default, local) or `network` (`psql -h $FOCUS_PG_HOST` with `PGPASSWORD`). `\COPY` is client-side in both modes so CSV streaming is identical.
+- **Why it matters:** This is the seam that lets the *exact same loader code* run in the PoC dev loop AND in the compose/ROSA container without modification — the D-1 portability promise made real. `onprem/cost_model.py` imports `db.loader.psql_argv()` so the mode logic lives in one place.
+- **EBA action:** In production (RDS) set `FOCUS_PG_MODE=network`, `FOCUS_PG_HOST=<rds-endpoint>`, and source `PGPASSWORD` from Secrets Manager at runtime (never bake it). The compose stack already runs in network mode.
+
+### P-7. Non-root container + `.dockerignore` excluding `out/` → the seed can't create its artifact dir
+- **What:** The production image runs as non-root user `finops` and `.dockerignore` excludes the host `out/` (correct — it's generated junk). On first run the seed pipeline tried `os.makedirs('/app/out')` and hit `PermissionError: [Errno 13]` because `/app` is root-owned (from `COPY`) and `finops` can't write there.
+- **Why it matters:** Classic non-root-container trap: everything works as root in dev, breaks the moment you drop privileges for production. The fix is one Dockerfile line — `RUN mkdir -p /app/out && chown -R finops:finops /app/out` *before* `USER finops`.
+- **EBA action:** Any directory the app writes at runtime (artifacts, caches, temp) must be created and chowned to the runtime user in the image build. In ROSA this matters even more — OpenShift assigns an arbitrary high UID by default (SCC `restricted-v2`), so make writable dirs group-writable (`chgrp 0 && chmod g+w`) rather than owned by a specific UID. Note this for the EKS/ROSA manifests.
+
 ## Web layer
 
 ### W-1. Starlette 1.x flipped `Jinja2Templates.TemplateResponse` to request-first

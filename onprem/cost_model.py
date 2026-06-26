@@ -99,12 +99,18 @@ def compute_rows(reference: dt.date | None = None) -> list[dict]:
 
 
 def load_into_postgres(
-    container: str = "finops_pg",
+    container: str = "finops_pg",  # retained for back-compat; ignored in network mode
     user: str = "focus_app",
     db: str = "focus",
 ) -> int:
-    """Truncate + reload focus.miq_onprem_cost from compute_rows()."""
+    """Truncate + reload focus.miq_onprem_cost from compute_rows().
+
+    Reuses db.loader.psql_argv() so the connection mode (docker exec for
+    local dev, network psql for containers/prod) is decided in one place.
+    """
     import csv, io
+    from db.loader import psql_argv  # single source of connection-mode truth
+
     rows = compute_rows()
     buf = io.StringIO()
     cols = [
@@ -118,18 +124,15 @@ def load_into_postgres(
         w.writerow({k: ("" if r[k] is None else r[k]) for k in cols})
 
     subprocess.run(
-        ["docker", "exec", "-i", container,
-         "psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1",
-         "-c", "TRUNCATE miq_onprem_cost RESTART IDENTITY"],
+        psql_argv(db=db, user=user) + ["-c", "TRUNCATE miq_onprem_cost RESTART IDENTITY"],
         check=True, capture_output=True,
     )
     proc = subprocess.run(
-        ["docker", "exec", "-i", container,
-         "psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1",
-         "-c",
-         f"\\COPY miq_onprem_cost ({', '.join(cols)}) "
-         f"FROM STDIN WITH (FORMAT csv, HEADER true, "
-         f"FORCE_NULL (chargeback_rate_id))"],
+        psql_argv(db=db, user=user) + [
+            "-c",
+            f"\\COPY miq_onprem_cost ({', '.join(cols)}) "
+            f"FROM STDIN WITH (FORMAT csv, HEADER true, "
+            f"FORCE_NULL (chargeback_rate_id))"],
         input=buf.getvalue().encode(), capture_output=True,
     )
     if proc.returncode != 0:

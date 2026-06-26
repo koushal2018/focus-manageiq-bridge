@@ -1,0 +1,56 @@
+# =============================================================
+# ENBD Multi-Cloud FinOps PoC — one-command stack
+#   docker compose up --build
+# Brings up Postgres + the web console, auto-seeds synthetic data,
+# serves the dashboard on http://localhost:8000.
+#
+# Portable (SPEC §2): runs on a laptop, on-prem, or any AWS host.
+# All data is synthetic. No real ENBD data, no real cloud credentials.
+# =============================================================
+name: enbd-finops
+
+services:
+  db:
+    image: postgres:16
+    container_name: enbd_finops_db
+    environment:
+      POSTGRES_USER: ${FOCUS_PG_USER:-focus_app}
+      POSTGRES_PASSWORD: ${FOCUS_PG_PASS:-focus_app_demo}
+      POSTGRES_DB: ${FOCUS_PG_DB:-focus}
+    volumes:
+      - finops_pgdata:/var/lib/postgresql/data
+    # Memory cap — a deliberate guard against the LM-1 class of problem
+    # (a DB container is tiny; this just makes the ceiling explicit).
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${FOCUS_PG_USER:-focus_app} -d ${FOCUS_PG_DB:-focus}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: enbd_finops_web
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FOCUS_PG_MODE: network
+      FOCUS_PG_HOST: db
+      FOCUS_PG_PORT: "5432"
+      FOCUS_PG_USER: ${FOCUS_PG_USER:-focus_app}
+      FOCUS_PG_PASS: ${FOCUS_PG_PASS:-focus_app_demo}
+      FOCUS_PG_DB: ${FOCUS_PG_DB:-focus}
+      # AI layer off by default — the stack runs fully without Bedrock.
+      # Set to 0 + provide AWS creds to enable the NL-query free-text path.
+      BEDROCK_DISABLED: ${BEDROCK_DISABLED:-1}
+      SEED_ON_START: "1"
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    restart: unless-stopped
+
+volumes:
+  finops_pgdata:

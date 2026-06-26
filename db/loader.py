@@ -29,9 +29,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-# --- connection env (GOTCHA D-1 exit ramp; defaults now point at the
-# standalone finops_pg container set up after LM-1 retired the appliance) ---
+# --- connection env (GOTCHA D-1 exit ramp) ---
+# Two connection modes, selected by FOCUS_PG_MODE:
+#   "docker"  (default) — local dev: `docker exec -i <container> psql ...`
+#   "network"           — container/prod: `psql -h host -p port ...` over TCP,
+#                         password from PGPASSWORD. This is what compose/ROSA use.
+FOCUS_PG_MODE = os.environ.get("FOCUS_PG_MODE", "docker")
 FOCUS_PG_CONTAINER = os.environ.get("FOCUS_PG_CONTAINER", "finops_pg")
+FOCUS_PG_HOST = os.environ.get("FOCUS_PG_HOST", "db")
+FOCUS_PG_PORT = os.environ.get("FOCUS_PG_PORT", "5432")
 FOCUS_PG_USER = os.environ.get("FOCUS_PG_USER", "focus_app")
 FOCUS_PG_DB = os.environ.get("FOCUS_PG_DB", "focus")
 
@@ -43,13 +49,27 @@ MIQ_UTIL_JSON = os.environ.get(
 )
 
 
-def run_psql(sql: str, db: str = FOCUS_PG_DB, user: str = FOCUS_PG_USER) -> str:
-    """Run a single SQL statement via docker exec psql. Returns stdout."""
-    cmd = [
+def psql_argv(db: str = FOCUS_PG_DB, user: str = FOCUS_PG_USER) -> list[str]:
+    """Build the psql invocation prefix for the active connection mode.
+
+    Both modes feed the same `-c <sql>` and stdin downstream, so the rest of
+    the loader is mode-agnostic. \\COPY is client-side either way, so CSV
+    streaming over stdin works identically.
+    """
+    if FOCUS_PG_MODE == "network":
+        return [
+            "psql", "-h", FOCUS_PG_HOST, "-p", FOCUS_PG_PORT,
+            "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1",
+        ]
+    return [
         "docker", "exec", "-i", FOCUS_PG_CONTAINER,
         "psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1",
-        "-c", sql,
     ]
+
+
+def run_psql(sql: str, db: str = FOCUS_PG_DB, user: str = FOCUS_PG_USER) -> str:
+    """Run a single SQL statement. Returns stdout."""
+    cmd = psql_argv(db, user) + ["-c", sql]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(
@@ -59,24 +79,13 @@ def run_psql(sql: str, db: str = FOCUS_PG_DB, user: str = FOCUS_PG_USER) -> str:
 
 
 def copy_csv_to_table(csv_path: str, table: str, columns: list[str]) -> int:
-    """Stream a CSV file into a Postgres table via psql \\COPY.
-
-    Strips columns we don't want to load (e.g. the focus CSV's blank ones
-    for FOCUS columns the loader doesn't carry). We pass the column list
-    explicitly to handle column ordering and missing-columns gracefully.
-    """
-    # We use \COPY (client-side) so file paths resolve on the host, then
-    # pipe stdin through docker exec.
+    """Stream a CSV file into a Postgres table via psql \\COPY (client-side)."""
     col_list = ", ".join(columns)
     sql = (
         f"\\COPY {table} ({col_list}) "
         f"FROM STDIN WITH (FORMAT csv, HEADER true, FORCE_NULL ({col_list}))"
     )
-    cmd = [
-        "docker", "exec", "-i", FOCUS_PG_CONTAINER,
-        "psql", "-U", FOCUS_PG_USER, "-d", FOCUS_PG_DB, "-v", "ON_ERROR_STOP=1",
-        "-c", sql,
-    ]
+    cmd = psql_argv() + ["-c", sql]
     with open(csv_path, "rb") as f:
         proc = subprocess.run(cmd, stdin=f, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -173,11 +182,7 @@ def load_focus_costs() -> int:
         f"\\COPY focus_costs ({col_list}) "
         f"FROM STDIN WITH (FORMAT csv, HEADER true, FORCE_NULL ({col_list}))"
     )
-    cmd = [
-        "docker", "exec", "-i", FOCUS_PG_CONTAINER,
-        "psql", "-U", FOCUS_PG_USER, "-d", FOCUS_PG_DB, "-v", "ON_ERROR_STOP=1",
-        "-c", sql,
-    ]
+    cmd = psql_argv() + ["-c", sql]
     with open(staged, "rb") as f:
         proc = subprocess.run(cmd, stdin=f, capture_output=True)
     if proc.returncode != 0:
@@ -223,11 +228,7 @@ def load_join_map() -> int:
         f"\\COPY resource_join_map ({col_list}) "
         f"FROM STDIN WITH (FORMAT csv, HEADER true, FORCE_NULL ({col_list}))"
     )
-    cmd = [
-        "docker", "exec", "-i", FOCUS_PG_CONTAINER,
-        "psql", "-U", FOCUS_PG_USER, "-d", FOCUS_PG_DB, "-v", "ON_ERROR_STOP=1",
-        "-c", sql,
-    ]
+    cmd = psql_argv() + ["-c", sql]
     with open(staged, "rb") as f:
         proc = subprocess.run(cmd, stdin=f, capture_output=True)
     if proc.returncode != 0:
@@ -264,9 +265,7 @@ def load_miq_utilization() -> int:
     for r in rows:
         w.writerow({k: r.get(k, "") for k in w.fieldnames})
 
-    cmd = [
-        "docker", "exec", "-i", FOCUS_PG_CONTAINER,
-        "psql", "-U", FOCUS_PG_USER, "-d", FOCUS_PG_DB, "-v", "ON_ERROR_STOP=1",
+    cmd = psql_argv() + [
         "-c",
         "\\COPY miq_utilization "
         "(miq_vm_id, timestamp, capture_interval, cpu_usage_pct, mem_usage_pct, resource_name) "
