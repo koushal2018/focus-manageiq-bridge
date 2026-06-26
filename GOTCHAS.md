@@ -117,6 +117,11 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 - **Why it matters:** The PoC's "deliverable = GOTCHAS.md" framing is RIGHT for the post-workshop hand-off but is NOT what unblocks the workshop schedule. Harsha needs to see screens. Until he does, the engagement is stuck on his Friday.
 - **EBA action:** Ship the running app to a URL Harsha can hit. Single-host EC2 with nginx in front of `uvicorn web.app:app` is enough — this is a demo, not a SLA. Make sure: (a) the `SYNTHETIC DATA` ribbon is visible, (b) every banner reads honestly, (c) the AI tab works in canned-only mode, (d) the carbon tab makes its "out of FOCUS" framing un-missable. THIS is the gate.
 
+### CX-5. EKS + RDS cannot be provisioned from this shell either — the instance role denies eks/rds/ecr/iam wholesale
+- **What:** When the demo direction turned toward "deploy on EKS + RDS," every probe failed: `eks:ListClusters`, `rds:DescribeDBInstances`, `ecr:DescribeRepositories`, `iam:ListRoles` all return AccessDenied for the `ManageIQInstanceRole`. Same root cause as CX-4, now confirmed across the larger surface a Kubernetes + managed-DB deploy needs.
+- **Why it matters:** A managed-orchestrator deployment is not buildable from inside the workload EC2. It requires a human-credentialed session (laptop `aws sso login` or CloudShell with an admin/power-user role) AND it conflicts with the PoC's own constraints: SPEC §2 portability invariant (must run on-prem OR AWS unchanged) and SPEC §5 #1 (done = `docker compose up` on one machine). EKS+RDS pins the build to AWS and turns a 1-command demo into a cluster-provisioning exercise.
+- **EBA action:** Keep EKS + RDS as the **production target after the sprint**, documented in EBA-BACKLOG.md — not the PoC deployment. For the PoC, ship `docker compose up`. When ENBD productionizes: the web service becomes a Deployment behind an ALB ingress; `db/loader.py` already honors `FOCUS_PG_*` env vars so RDS is a connection-string swap (D-1's exit ramp); ManageIQ stays wherever it lives today (likely on-prem, given the OOM profile in LM-1).
+
 ### CX-4. The dev EC2 instance profile has no CloudFront / EC2 permissions — provisioning AWS infrastructure from this shell hits AccessDenied
 - **What:** `aws sts get-caller-identity` from this EC2 returns the instance role `EnbdDemoManageIQStack-ManageIQInstanceRole74DFDE14-PkhSOEYhGRaB`. Calling `cloudfront:ListDistributions`, `ec2:DescribeInstances`, or `ec2:DescribeSecurityGroups` from that role returns `AccessDenied` / `UnauthorizedOperation`. Account `401552979575` (the demo account).
 - **Why it matters:** The intuitive plan ("CloudFront distribution in front of EC2 origin → share URL with Harsha") cannot be executed from inside the EC2 itself. The instance role is correctly scoped to what its workload needs (running ManageIQ, talking to its own services). Standing up demo-facing infrastructure (CloudFront, security-group changes, ACM certs) needs a HUMAN AWS session with elevated permissions, run from a laptop or a CloudShell, NOT from the workload instance.
@@ -284,6 +289,30 @@ _(nothing yet — start with Azure per SPEC §2)_
 - **What:** The Amazon Harmony stylebook (the source of the "Liquid Motion" / Evolution design language) lives on `*.a2z.com`, which requires Amazon midway/SSO. WebFetch from this Claude session returns an empty document (auth challenge stripped).
 - **Why it matters:** The demo's visual language can't be a verbatim implementation of Harmony Evolution without the real tokens. I'm building **"Liquid Motion-inspired"** — fluid gradients, motion-driven hierarchy, glass surfaces — using the publicly-described characteristics. Note this on the demo footer or in handoff so reviewers understand it's homage, not implementation.
 - **EBA action:** If brand-alignment with Harmony Evolution becomes required (e.g. for a Sean-level review), have someone with Amazon SSO export the tokens (palette, type scale, motion curves) into a self-contained JSON the PoC consumes. The CSS layer in `web/templates/_base.html` is designed to accept token-substitution cleanly.
+
+## Production architecture
+
+### P-1. `us-east-1` for a UAE bank's real cost data is a residency decision, not a default
+- **What:** The pilot is targeted at `us-east-1` (simpler, best Bedrock model availability). For production with REAL ENBD cost data, hosting in N. Virginia means bank-confidential financial data leaves the UAE.
+- **Why it matters:** ENBD is a UAE-regulated bank; cost/usage data is commercially sensitive (Sean's stated concern, SPEC §0). A security/compliance reviewer will challenge any design that lands real data outside me-central-1 without an explicit, signed-off reason. The PoC runs on synthetic data so us-east-1 is fine now — the trap is carrying that region choice silently into production.
+- **EBA action:** Parameterize region everywhere (CDK/Helm values, Bedrock client). Pilot = us-east-1 on synthetic data. Production = me-central-1 (UAE) unless legal explicitly clears otherwise. Bedrock in me-central-1 is `global.` inference-profile only (GOTCHA B-1) — factor that into the production AI posture.
+
+### P-2. ENBD runs OpenShift → target ROSA, not raw EKS
+- **What:** ENBD's platform team is an OpenShift shop. Handing them raw EKS means a second orchestration model to operate (Ingress vs Route, generic RBAC vs SCC, Helm vs OpenShift templates/Operators, `kubectl` vs `oc`).
+- **Why it matters:** ManageIQ is itself Red Hat lineage (upstream of CloudForms), so the team already lives in the Red Hat ecosystem. ROSA (Red Hat OpenShift Service on AWS) is managed OpenShift on AWS-native infrastructure — same `oc`/Operators/Routes the team knows, no new platform to learn. The PoC container image runs unchanged; only the deploy manifests differ.
+- **EBA action:** Production web tier = ROSA Deployment + Route (+ optional OpenShift Pipelines for CI). Keep ECS Fargate as the documented lighter alternative if this stays a standalone low-traffic dashboard rather than joining the OpenShift estate. Don't introduce EKS — it's the worst of both (new platform AND not their platform).
+
+## Connector framework (connect-and-run)
+
+### P-3. "Connect a source and it runs" works because the PoC already built the hard part — onboarding is a registry row, not transform code
+- **What:** `connectors/` wraps the PoC normalizers behind a `SourceAdapter` contract + a source registry + a dispatcher. Adding a source INSTANCE (a 4th AWS payer, a 2nd Azure subscription) is one `registry.add_source(...)` call — proven live: the dispatcher picked up the new source and produced its rows with zero transform code touched. Adding a source TYPE is one new adapter + one normalizer module.
+- **Why it matters:** This is the production value proposition made concrete for Harsha. The reason it's achievable in a sprint (not a multi-quarter platform build) is that the genuinely hard work — per-provider FOCUS mappings and the asymmetric join (J-1) — was de-risked in the PoC. The connector layer is glue around proven transforms.
+- **EBA action:** Production swaps three things, none of which touch the FOCUS mapping: (1) registry JSON file → a DB table written by the admin UI; (2) adapters' `discover()` local-CSV stub → S3/blob object listing with a watermark; (3) `credential_ref` → real Secrets Manager ARNs resolved at fetch time. The `normalize()` half of every adapter is unchanged from PoC to production — that's the invariant that makes the estimate credible.
+
+### P-4. The dispatcher replaces `normalizer/__main__.py` — same output file, registry-driven input
+- **What:** `connectors/dispatcher.py` writes the identical `out/normalizer/focus_combined.csv` that `db/loader.py` already consumes, but the source list comes from `connectors/registry.py` instead of a hard-coded literal. The two entry points coexist; the dispatcher is the production path.
+- **Why it matters:** Anyone running the PoC pipeline by muscle memory (`python -m normalizer`) still works, but the connect-and-run demo uses `python -m connectors.dispatcher`. Don't let the two drift — the dispatcher is canonical going forward; the old `__main__` is kept only so existing docs/scripts don't break.
+- **EBA action:** Point CI and the docker entrypoint at `connectors.dispatcher`, not `normalizer.__main__`. Eventually retire the latter once nothing references it.
 
 ## Web layer
 

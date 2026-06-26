@@ -23,6 +23,7 @@ OCI_SERVICE_TO_FOCUS_CATEGORY = {
     "ADW": "Databases",
     "AI_PLATFORM": "AI and Machine Learning",
     "DATA_SCIENCE": "AI and Machine Learning",
+    "GEN_AI": "AI and Machine Learning",
     "SUPPORT": "Other",          # support fees aren't a FOCUS service category
     "FAST_CONNECT": "Networking",
     "VCN": "Networking",
@@ -102,7 +103,13 @@ def map_row(oci: dict[str, str]) -> MappedRow:
         "ServiceSubcategory": oci.get("product/resource", ""),
         "ServiceName": service.title().replace("_", " "),
         "SkuId": oci.get("product/sku", ""),
-        "SkuMeter": oci.get("product/sku", ""),
+        # For gen-AI rows the model id is the resourceName; surface it in
+        # SkuMeter so the AI view groups by model (parity with aws_to_focus).
+        "SkuMeter": (
+            oci.get("lineItem/resourceName", "") or oci.get("product/sku", "")
+            if service == "GEN_AI"
+            else oci.get("product/sku", "")
+        ),
         "SkuPriceId": "",
         "ResourceId": oci.get("lineItem/resourceId", ""),
         "ResourceName": oci.get("lineItem/resourceName", ""),

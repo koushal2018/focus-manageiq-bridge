@@ -160,6 +160,47 @@ def generate(days: int = 3) -> list[dict[str, str]]:
                 )
             )
 
+    # OCI generative-AI line items (per-model). Requirement #1 was widened
+    # on the 2026-06-26 call to cover OCI alongside Bedrock + Azure OpenAI
+    # (GOTCHA CX-3). OCI's GenAI service bills per-character for some models
+    # and per-token for others; we model the Cohere + Llama families OCI
+    # resells. service code GEN_AI so the normalizer maps it to the FOCUS
+    # 'AI and Machine Learning' ServiceCategory.
+    oci_genai_models = [
+        # (model_id, sku, unit_price_per_10k_tokens_usd, tokens)
+        ("cohere.command-r-plus",      "B99001", 0.0150, 180_000),
+        ("cohere.command-r-08-2024",   "B99002", 0.0030, 120_000),
+        ("meta.llama-3.1-70b-instruct","B99003", 0.0072,  90_000),
+    ]
+    genai_start = dt.datetime(2026, 6, 1, 0, 0, tzinfo=dt.timezone.utc)
+    for d in range(min(days, 2)):
+        day_s = genai_start + dt.timedelta(days=d)
+        day_e = day_s + dt.timedelta(days=1)
+        for model_id, sku, price_10k, tokens in oci_genai_models:
+            n += 1
+            cost = (tokens / 10_000.0) * price_10k
+            rows.append(
+                _row(
+                    start=day_s,
+                    end=day_e,
+                    line_no=n,
+                    compartment_name="Analytics",
+                    region=common.OCI_REGIONS[0],
+                    resource_id=f"ocid1.generativeaimodel.oc1.me-dubai-1.demo{sku.lower()}",
+                    resource_name=model_id,
+                    service="GEN_AI",
+                    resource_type="GENERATIVE_AI",
+                    sku=sku,
+                    description=f"OCI Generative AI - {model_id} inference",
+                    billed_quantity=float(tokens),
+                    consumed_quantity=float(tokens),
+                    consumed_units="TOKENS",
+                    unit_price_usd=price_10k,
+                    cost_usd=cost,
+                    tags_user={"app": "ai-assist", "env": "prod"},
+                )
+            )
+
     # A tenancy-level row with empty compartment --- gotcha for joiners
     # that assume every row has a compartment to attribute cost to.
     n += 1

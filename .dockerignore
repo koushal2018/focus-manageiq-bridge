@@ -1,0 +1,17 @@
+.git
+.venv
+venv
+out
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.claude
+docs/superpowers
+*.md
+!README.md
+.env
+.env.local
+*.pem
+node_modules
