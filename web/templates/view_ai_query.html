@@ -1,0 +1,148 @@
+{% extends "_base.html" %}
+{% block title %}NL query &mdash; ENBD FinOps PoC{% endblock %}
+{% block content %}
+<h1>Natural-language query</h1>
+<p class="subtitle">Optional Bedrock layer per SPEC &sect;3.6.</p>
+
+{% if not bedrock_enabled %}
+<div class="banner warn">
+  <span class="verdict">AI OFF</span>
+  Bedrock NL-query is disabled this session (<code>BEDROCK_DISABLED=1</code>).
+  The canned queries below still run. To enable free-text:
+  <code>BEDROCK_DISABLED=0</code> with AWS credentials configured for
+  <code>{{ region }}</code> against <code>{{ model }}</code>.
+</div>
+{% else %}
+<div class="banner info">
+  <span class="verdict">AI ON</span>
+  Free-text mode active. Region: <code>{{ region }}</code>.
+  Model: <code>{{ model }}</code>. Every answer must show the SQL that
+  was run and the rows it returned &mdash; no narration without provenance.
+</div>
+{% endif %}
+
+<div class="banner bad">
+  <span class="verdict">GUARDRAIL</span>
+  Every SQL the model produces goes through <code>ai/sql_guard.py</code>:
+  parsed by sqlglot, rejected unless it's a single SELECT against the four
+  allowlisted tables (<code>focus_costs</code>, <code>resource_join_map</code>,
+  <code>miq_utilization</code>, <code>miq_onprem_cost</code>).
+  Wrong-cost-with-confident-narration is the worst outcome for a bank;
+  this layer fails closed.
+</div>
+
+<h2>Canned queries (no AI involved)</h2>
+<table>
+  <thead>
+    <tr><th>Name</th><th>Description</th><th>Params</th><th>Run</th></tr>
+  </thead>
+  <tbody>
+  {% for q in queries %}
+    <tr>
+      <td><code>{{ q.name }}</code></td>
+      <td class="muted">{{ q.description }}</td>
+      <td class="muted">
+        {% if q.params %}
+          {% for k, v in q.params.items() %}
+            <code>{{ k }}</code>={{ v }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        {% else %}
+          <em>(none)</em>
+        {% endif %}
+      </td>
+      <td><button class="run-btn" data-q="{{ q.name }}" data-params='{{ q.params|tojson }}'>Run</button></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Free-text question {% if not bedrock_enabled %}<span class="pill no_resource_id">disabled</span>{% endif %}</h2>
+<form id="ask-form" {% if not bedrock_enabled %}style="opacity:.55"{% endif %}>
+  <textarea id="question" placeholder="e.g. Which workloads cost the most relative to their CPU utilization?"
+            style="width:100%; min-height:80px; background:var(--panel); color:var(--ink); border:1px solid #2a3a55; border-radius:6px; padding:10px; font-family:inherit; font-size:14px;"
+            {% if not bedrock_enabled %}disabled{% endif %}></textarea>
+  <button id="ask-btn" type="submit" {% if not bedrock_enabled %}disabled{% endif %}
+          style="margin-top:10px; padding:8px 14px; background:var(--accent); color:white; border:0; border-radius:4px; cursor:pointer;">
+    Ask Bedrock
+  </button>
+</form>
+
+<div id="result" style="margin-top:24px;"></div>
+
+<style>
+  button.run-btn { padding:5px 10px; background:var(--panel-2); color:var(--ink); border:1px solid #2a3a55; border-radius:4px; cursor:pointer; }
+  button.run-btn:hover { background:var(--accent); color:white; }
+  pre.sql { background:var(--panel); border-radius:6px; padding:12px; overflow-x:auto; color:var(--ink-2); font-size:12px; }
+</style>
+
+<script>
+  async function postJSON(url, body) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const text = await r.text();
+    let data; try { data = JSON.parse(text); } catch { data = {detail: text}; }
+    return {ok: r.ok, status: r.status, data};
+  }
+
+  function renderRows(rows) {
+    if (!rows || !rows.length) return '<p class="muted"><em>(0 rows)</em></p>';
+    const cols = Object.keys(rows[0]);
+    let h = '<table><thead><tr>';
+    for (const c of cols) h += '<th>' + c + '</th>';
+    h += '</tr></thead><tbody>';
+    for (const r of rows) {
+      h += '<tr>';
+      for (const c of cols) h += '<td>' + (r[c] === null ? '<em>null</em>' : String(r[c])) + '</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table>';
+    return h;
+  }
+
+  function showResult({sql, rows, err}) {
+    const root = document.getElementById('result');
+    if (err) {
+      root.innerHTML = '<div class="banner bad"><span class="verdict">ERROR</span>' + err + '</div>';
+      return;
+    }
+    root.innerHTML =
+      '<h2>SQL</h2><pre class="sql">' + sql.replace(/</g, '&lt;') + '</pre>' +
+      '<h2>Rows</h2>' + renderRows(rows);
+  }
+
+  document.querySelectorAll('.run-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const q = btn.dataset.q;
+      const paramDecl = JSON.parse(btn.dataset.params || '{}');
+      const params = {};
+      for (const k of Object.keys(paramDecl)) {
+        const v = prompt('Param ' + k + ' (' + paramDecl[k] + '):');
+        if (v === null) return;
+        params[k] = v;
+      }
+      const {ok, status, data} = await postJSON('/ai/canned', {name: q, params});
+      if (!ok) return showResult({err: 'HTTP ' + status + ': ' + (data.detail || JSON.stringify(data))});
+      showResult({sql: data.sql, rows: data.rows});
+    });
+  });
+
+  document.getElementById('ask-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const question = document.getElementById('question').value.trim();
+    if (!question) return;
+    document.getElementById('ask-btn').disabled = true;
+    document.getElementById('result').innerHTML = '<p class="muted">Thinking...</p>';
+    const {ok, status, data} = await postJSON('/ai/ask', {question});
+    document.getElementById('ask-btn').disabled = false;
+    if (!ok) return showResult({err: 'HTTP ' + status + ': ' + (data.detail || JSON.stringify(data))});
+    if (data.refused) {
+      showResult({err: 'Guardrail refusal. SQL emitted: ' + data.sql});
+      return;
+    }
+    showResult({sql: data.sql, rows: data.rows});
+  });
+</script>
+{% endblock %}

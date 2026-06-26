@@ -17,6 +17,10 @@ from fastapi.templating import Jinja2Templates
 
 from web import queries
 
+# Slice 7: optional Bedrock NL-query layer. Mounted as a router; works
+# (in canned-query-only mode) even when Bedrock is disabled.
+from ai.router import router as ai_router
+
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(THIS_DIR, "templates")
@@ -35,6 +39,8 @@ app = FastAPI(
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 if os.path.isdir(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+app.include_router(ai_router)
 
 
 @app.get("/", response_class=HTMLResponse)
