@@ -40,7 +40,7 @@ class JoinRow:
     focus_source: str               # 'aws'/'azure'/'oci' or '' for MIQ-only
     focus_resource_id: str
     focus_service_category: str
-    focus_billed_cost_sum: float
+    focus_billed_cost_sum: str  # formatted Decimal string, fixed scale (H-7)
     focus_row_count: int
     miq_vm_id: str
     miq_vm_name: str
@@ -59,6 +59,38 @@ def _load_focus_rows(path: str) -> list[dict]:
 def _miq_key_for_provider(source: str) -> str:
     """Per GOTCHA J-1: Azure joins on ems_ref, AWS/OCI on uid_ems."""
     return "ems_ref" if source == "azure" else "uid_ems"
+
+
+def canonical_id(value: str | None, source: str) -> str:
+    """Canonicalize a join identifier so real-world format variance does not
+    produce silent zero-matches (GOTCHA H-3).
+
+    Applied identically to BOTH sides (FOCUS ResourceId and the MIQ key) so
+    they meet in the middle:
+      - all providers: Unicode NFC + strip surrounding whitespace
+      - Azure: lower-case. ARM resource paths are case-INSENSITIVE but
+        case-PRESERVING, so a FOCUS export and ManageIQ's ems_ref routinely
+        disagree on `resourceGroups` vs `resourcegroups`, `Microsoft.Compute`
+        casing, etc. Lower-casing both sides makes the compare reliable.
+      - AWS: reduce a full ARN to its trailing resource id when present
+        (`arn:aws:ec2:...:instance/i-0abc` -> `i-0abc`) and lower-case the
+        hex of the instance id (`i-0ABC` == `i-0abc`).
+      - OCI: OCIDs are case-sensitive by spec; only NFC+strip.
+    """
+    import unicodedata
+    if value is None:
+        return ""
+    v = unicodedata.normalize("NFC", str(value)).strip()
+    if not v:
+        return ""
+    if source == "azure":
+        return v.lower()
+    if source == "aws":
+        if v.startswith("arn:") and "/" in v:
+            v = v.rsplit("/", 1)[-1]   # arn .../instance/i-0abc -> i-0abc
+        return v.lower()
+    # oci + anything else: case-sensitive identifiers
+    return v
 
 
 def build(
@@ -81,32 +113,43 @@ def build(
         else:
             miq_vms = miq_client.get_vms()
 
-    # Aggregate focus rows by (source, resource_id) to collapse 24h of EC2
-    # hourly rows into one join key. We sum BilledCost across the group so
-    # the join row carries something meaningful.
+    # Aggregate focus rows by (source, original resource_id) to collapse 24h
+    # of hourly rows into one join key. Money is summed as Decimal (GOTCHA
+    # H-7 — never float for currency). We keep the ORIGINAL rid for display
+    # and compute a canonical key for matching (H-3).
+    from decimal import Decimal, InvalidOperation
     grouped: dict[tuple[str, str], dict] = defaultdict(
-        lambda: {"rows": 0, "cost": 0.0, "categories": set()}
+        lambda: {"rows": 0, "cost": Decimal("0"), "categories": set()}
     )
     for r in focus_rows:
         source = r.get("_source", "")
         rid = r.get("ResourceId", "")
         key = (source, rid)
         try:
-            cost = float(r.get("BilledCost", "") or 0)
-        except ValueError:
-            cost = 0.0
+            cost = Decimal(str(r.get("BilledCost", "") or "0"))
+        except (InvalidOperation, ValueError):
+            cost = Decimal("0")
         grouped[key]["rows"] += 1
         grouped[key]["cost"] += cost
         grouped[key]["categories"].add(r.get("ServiceCategory", ""))
 
-    # Index MIQ vms by uid_ems and ems_ref for O(1) lookup
+    # Index MIQ vms on CANONICAL keys (H-3): uid_ems canonicalized the way
+    # aws/oci ResourceIds are, ems_ref the way azure ResourceIds are. The
+    # FOCUS side is canonicalized with the same function at lookup time, so
+    # both sides meet in the middle regardless of source-format casing.
+    # Canonicalize each VM key by the SOURCE whose ResourceId will look it up:
+    # uid_ems is matched by aws/oci rows, ems_ref by azure rows. We index
+    # uid_ems under the VM's own vendor so OCIDs (case-sensitive) and AWS
+    # instance ids (case-folded) each get the right treatment.
+    _vendor_to_source = {"amazon": "aws", "oracle": "oci", "azure": "azure"}
     by_uid_ems: dict[str, list[dict]] = defaultdict(list)
     by_ems_ref: dict[str, list[dict]] = defaultdict(list)
     for vm in miq_vms:
+        vsrc = _vendor_to_source.get((vm.get("vendor") or "").lower(), "aws")
         if vm.get("uid_ems"):
-            by_uid_ems[vm["uid_ems"]].append(vm)
+            by_uid_ems[canonical_id(vm["uid_ems"], vsrc)].append(vm)
         if vm.get("ems_ref"):
-            by_ems_ref[vm["ems_ref"]].append(vm)
+            by_ems_ref[canonical_id(vm["ems_ref"], "azure")].append(vm)
 
     matched_vm_ids: set[str] = set()
     join_rows: list[JoinRow] = []
@@ -116,7 +159,8 @@ def build(
             "focus_source": source,
             "focus_resource_id": rid,
             "focus_service_category": " | ".join(sorted(c for c in agg["categories"] if c)),
-            "focus_billed_cost_sum": round(agg["cost"], 6),
+            # Decimal → string with fixed scale; preserves money precision (H-7)
+            "focus_billed_cost_sum": f"{agg['cost']:.6f}",
             "focus_row_count": agg["rows"],
         }
         if not rid:
@@ -134,7 +178,10 @@ def build(
             continue
 
         key_col = _miq_key_for_provider(source)
-        candidates = (by_ems_ref if key_col == "ems_ref" else by_uid_ems).get(rid, [])
+        # Canonicalize the FOCUS ResourceId the same way the MIQ key was
+        # indexed (H-3) so casing/ARN-format differences still match.
+        canon_rid = canonical_id(rid, source)
+        candidates = (by_ems_ref if key_col == "ems_ref" else by_uid_ems).get(canon_rid, [])
 
         if not candidates:
             join_rows.append(JoinRow(
@@ -191,7 +238,7 @@ def build(
             focus_source="",
             focus_resource_id="",
             focus_service_category="",
-            focus_billed_cost_sum=0.0,
+            focus_billed_cost_sum="0.000000",
             focus_row_count=0,
             miq_vm_id=str(vm["id"]),
             miq_vm_name=vm.get("name", ""),
@@ -228,8 +275,9 @@ def summarize(rows: list[JoinRow]) -> None:
         print(f"  {s:<22} {n}")
     print()
 
-    matched = sum(r.focus_billed_cost_sum for r in rows if r.status == "matched")
-    focus_only = sum(r.focus_billed_cost_sum for r in rows if r.status == "unmatched_focus_only")
+    from decimal import Decimal
+    matched = sum((Decimal(str(r.focus_billed_cost_sum)) for r in rows if r.status == "matched"), Decimal("0"))
+    focus_only = sum((Decimal(str(r.focus_billed_cost_sum)) for r in rows if r.status == "unmatched_focus_only"), Decimal("0"))
     print(f"BilledCost attributed to matched MIQ vms : {matched:>12,.2f}")
     print(f"BilledCost stranded as focus-only        : {focus_only:>12,.2f}")
     print()
