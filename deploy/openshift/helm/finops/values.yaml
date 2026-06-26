@@ -1,0 +1,60 @@
+# =============================================================
+# FinOps console — Helm values. Fill image.repository + db.* from the
+# Terraform outputs (ecr_repository_url, rds_endpoint, db_secret_arn).
+# =============================================================
+
+image:
+  repository: ""          # <- ECR repo url from terraform output ecr_repository_url
+  tag: "latest"           # pin to a digest/tag in real deploys
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# Database connection. Password is NOT here — it comes from the mounted
+# secret below (G-1). Host/port/user/db are non-secret config.
+db:
+  mode: network           # P-6: same loader code as the PoC, network mode
+  host: ""                # <- terraform output rds_endpoint
+  port: "5432"
+  user: "focus_app"
+  name: "focus"
+  # Name of the k8s Secret holding key `password`. Sync it from the
+  # Secrets Manager ARN (terraform output db_secret_arn) via the
+  # Secrets Store CSI driver or External Secrets Operator — do not paste
+  # the password into values.
+  passwordSecretName: "finops-db"
+  passwordSecretKey: "password"
+
+# Bedrock NL-query: off unless legal clears me-central-1 residency (B-1).
+bedrock:
+  disabled: "1"
+  region: "us-east-1"
+  modelId: "global.anthropic.claude-sonnet-4-6"
+
+# Seed runs once as a Job (Helm hook) before the Deployment serves, so the
+# DB is populated. In production the dispatcher runs on a schedule (a
+# CronJob) instead of seeding synthetic data — see templates/cronjob.yaml.
+seed:
+  enabled: true           # pilot: seed synthetic data once
+  schedule: "0 */6 * * *" # prod dispatcher cadence (CronJob)
+
+route:
+  enabled: true
+  host: ""                # e.g. finops.apps.<cluster-domain>; blank = auto
+  tls:
+    termination: edge     # TLS terminated at the Route; private cluster
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+  limits:
+    cpu: "1"
+    memory: "512Mi"
+
+# OpenShift assigns an arbitrary high UID (SCC restricted-v2). The image's
+# writable dirs are group-0-writable (P-7) so this works without runAsUser.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault

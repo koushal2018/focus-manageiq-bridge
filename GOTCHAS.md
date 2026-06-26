@@ -334,6 +334,16 @@ _(nothing yet — start with Azure per SPEC §2)_
 - **Why it matters:** Classic non-root-container trap: everything works as root in dev, breaks the moment you drop privileges for production. The fix is one Dockerfile line — `RUN mkdir -p /app/out && chown -R finops:finops /app/out` *before* `USER finops`.
 - **EBA action:** Any directory the app writes at runtime (artifacts, caches, temp) must be created and chowned to the runtime user in the image build. In ROSA this matters even more — OpenShift assigns an arbitrary high UID by default (SCC `restricted-v2`), so make writable dirs group-writable (`chgrp 0 && chmod g+w`) rather than owned by a specific UID. Note this for the EKS/ROSA manifests.
 
+### P-8. ROSA is usually provisioned by the `rosa` CLI / OCM, not pure Terraform — don't promise a one-shot `terraform apply`
+- **What:** The instinct is "Terraform everything." ROSA's reality: the cluster needs STS account-roles, operator-roles, and an OIDC provider created first, and the canonical path is `rosa create account-roles` + `rosa create cluster --sts --mode auto`. There IS a `terraform-redhat/rhcs` provider, but using it well still means wiring those roles. `deploy/terraform/rosa.tf` ships the rhcs resource as a commented skeleton and documents the CLI path as the pragmatic default.
+- **Why it matters:** A reviewer expecting `terraform apply` to stand up the whole platform will be surprised that ROSA is a semi-separate step. Setting that expectation wrong wastes a planning cycle. The VPC/RDS/ECR/Secrets ARE pure Terraform; ROSA is the deliberate exception.
+- **EBA action:** Treat infra in two passes: (1) `terraform apply` → VPC + RDS + ECR + Secrets Manager; (2) `rosa create cluster` into the VPC's private subnets (Terraform output `private_subnet_ids`); (3) `helm upgrade --install` the app. The `deploy/README.md` spells out this order.
+
+### P-9. OpenShift `restricted-v2` SCC runs the pod as an arbitrary high UID — the image must not depend on a specific UID
+- **What:** On ROSA/OpenShift, pods get an arbitrary UID (e.g. 1000680000), NOT the `finops` UID 10001 baked into the image. Anything the app writes must be writable by an arbitrary UID in group 0. The PoC image chowns `/app/out` to `finops:finops` (P-7) — on OpenShift that chown is moot; what matters is group-0 write (`chgrp 0 /app/out && chmod g+rwX /app/out`).
+- **Why it matters:** "Works in docker-compose, CrashLoopBackOff on ROSA" with a permission error on the artifact dir is the classic symptom. The compose run uses the baked UID; OpenShift does not.
+- **EBA action:** Before pushing the image for ROSA, add `RUN chgrp -R 0 /app/out && chmod -R g+rwX /app/out` to the Dockerfile (group-0 writable). The Helm `podSecurityContext` deliberately omits `runAsUser` so OpenShift assigns its own. Verify with `oc rsh` that the app can write `/app/out`.
+
 ## Web layer
 
 ### W-1. Starlette 1.x flipped `Jinja2Templates.TemplateResponse` to request-first

@@ -1,0 +1,41 @@
+{{- if .Values.seed.enabled }}
+# Pre-install/upgrade hook: apply schema + seed synthetic data ONCE, before
+# the Deployment serves. In production (real data) you would disable this and
+# rely on the dispatcher CronJob instead — seeding synthetic rows is a
+# pilot-only behaviour.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "finops.name" . }}-seed
+  labels: {{- include "finops.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels: {{- include "finops.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: seed
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Override the image entrypoint: apply schema, then run the seed
+          # pipeline. No gunicorn — this is a batch step.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              export PGPASSWORD="$FOCUS_PG_PASS"
+              echo "[seed-job] applying schema"
+              psql -h "$FOCUS_PG_HOST" -p "$FOCUS_PG_PORT" -U "$FOCUS_PG_USER" \
+                   -d "$FOCUS_PG_DB" -v ON_ERROR_STOP=1 -f db/schema.sql
+              echo "[seed-job] seeding"
+              python -m docker.seed
+          env: {{- include "finops.env" . | nindent 12 }}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+{{- end }}

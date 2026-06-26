@@ -57,7 +57,11 @@ COPY --chown=finops:finops . .
 
 # Writable artifact dir for the seed pipeline (generators/dispatcher write
 # CSVs + JSON here). .dockerignore excludes the host's out/, so create it.
-RUN mkdir -p /app/out && chown -R finops:finops /app/out
+# Group-0 writable so it works BOTH under the baked UID (docker-compose) AND
+# under OpenShift's arbitrary-UID SCC (ROSA, P-9), which runs as group 0.
+RUN mkdir -p /app/out \
+    && chown -R finops:0 /app/out \
+    && chmod -R g+rwX /app/out
 
 # Drop privileges.
 USER finops
