@@ -44,9 +44,17 @@ services:
       FOCUS_PG_USER: ${FOCUS_PG_USER:-focus_app}
       FOCUS_PG_PASS: ${FOCUS_PG_PASS:-focus_app_demo}
       FOCUS_PG_DB: ${FOCUS_PG_DB:-focus}
-      # AI layer off by default — the stack runs fully without Bedrock.
-      # Set to 0 + provide AWS creds to enable the NL-query free-text path.
+      # AI layer: the stack runs fully without Bedrock. Default OFF; flip
+      # BEDROCK_DISABLED=0 (e.g. in .env) to enable the NL-query free-text
+      # path. Region/model default to the us-east-1 inference profile that
+      # this account's role can invoke; me-central-1 prod uses a global.
+      # profile and is residency-gated (GOTCHA B-1).
       BEDROCK_DISABLED: ${BEDROCK_DISABLED:-1}
+      BEDROCK_REGION: ${BEDROCK_REGION:-us-east-1}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-us.anthropic.claude-sonnet-4-6}
+      # boto3 picks up the EC2 instance role via IMDS automatically; no
+      # static keys baked in. AWS_REGION set so the SDK has a default.
+      AWS_REGION: ${BEDROCK_REGION:-us-east-1}
       SEED_ON_START: "1"
     ports:
       - "${WEB_PORT:-8000}:8000"
