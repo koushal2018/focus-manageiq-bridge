@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}ENBD Multi-Cloud FinOps PoC{% endblock %}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg:     #0f1620;
+    --panel:  #1a2332;
+    --panel-2:#22304a;
+    --ink:    #e7edf6;
+    --ink-2:  #aab6c7;
+    --accent: #4d9aff;
+    --warn-bg:#3a2920;
+    --warn-fg:#ffc78a;
+    --info-bg:#1c3144;
+    --info-fg:#9ec4ff;
+    --bad-bg: #3a1f24;
+    --bad-fg: #ff9ba1;
+    --ok-bg:  #1c3a2c;
+    --ok-fg:  #8be0a3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  header.topbar {
+    background: var(--panel);
+    border-bottom: 1px solid #2a3a55;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  header.topbar .brand {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--ink);
+  }
+  header.topbar .brand .sub {
+    color: var(--ink-2);
+    font-weight: 400;
+    margin-left: 8px;
+    font-size: 13px;
+  }
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+  nav.tabs a {
+    color: var(--ink-2);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  nav.tabs a.active,
+  nav.tabs a:hover {
+    color: var(--ink);
+    background: var(--panel-2);
+  }
+  main {
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px 0; font-weight: 600; }
+  h2 { font-size: 16px; margin: 24px 0 8px 0; font-weight: 600; color: var(--ink-2); }
+  p.subtitle { color: var(--ink-2); margin: 0 0 18px 0; }
+  .banner {
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    border-left: 3px solid;
+  }
+  .banner.info { background: var(--info-bg); color: var(--info-fg); border-color: var(--accent); }
+  .banner.warn { background: var(--warn-bg); color: var(--warn-fg); border-color: #d8923e; }
+  .banner.bad  { background: var(--bad-bg);  color: var(--bad-fg);  border-color: #d84545; }
+  .banner.ok   { background: var(--ok-bg);   color: var(--ok-fg);   border-color: #5ec27a; }
+  .banner .verdict {
+    display: inline-block;
+    font-weight: 700;
+    margin-right: 6px;
+    min-width: 70px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  thead th {
+    background: var(--panel-2);
+    color: var(--ink-2);
+    text-align: left;
+    padding: 9px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #2a3a55;
+  }
+  tbody td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #1f2c41;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--panel-2); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.muted { color: var(--ink-2); }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--panel);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .stat .label {
+    color: var(--ink-2);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .stat .value {
+    font-size: 24px;
+    font-weight: 600;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 600;
+  }
+  .pill.matched              { background: var(--ok-bg);  color: var(--ok-fg); }
+  .pill.unmatched_focus_only { background: var(--warn-bg); color: var(--warn-fg); }
+  .pill.unmatched_miq_only   { background: var(--info-bg); color: var(--info-fg); }
+  .pill.no_resource_id       { background: var(--panel-2); color: var(--ink-2); }
+  .pill.ambiguous            { background: var(--bad-bg);  color: var(--bad-fg); }
+  .footer {
+    color: var(--ink-2);
+    font-size: 12px;
+    padding: 24px 0 8px 0;
+    text-align: center;
+    border-top: 1px solid #1f2c41;
+    margin-top: 32px;
+  }
+  .footer code {
+    background: var(--panel);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  a { color: var(--accent); }
+  .demo-tag {
+    display: inline-block;
+    background: #5a2740;
+    color: #ffb7d0;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">ENBD FinOps PoC <span class="sub">FOCUS &times; ManageIQ &times; Bedrock</span></span>
+    <span class="demo-tag">SYNTHETIC DATA</span>
+    <nav class="tabs">
+      <a href="/"                  class="{% if active=='home'         %}active{% endif %}">Overview</a>
+      <a href="/views/ai"          class="{% if active=='ai'           %}active{% endif %}">AI cost</a>
+      <a href="/views/utilization" class="{% if active=='utilization'  %}active{% endif %}">Utilization &times; cost</a>
+      <a href="/views/cloud-vs-onprem" class="{% if active=='cloud-vs-onprem' %}active{% endif %}">Cloud vs on-prem</a>
+      <a href="/views/carbon"      class="{% if active=='carbon'       %}active{% endif %}">Carbon</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <div class="footer">
+    Throwaway PoC built for the ENBD EBA innovation sprint. The deliverable is
+    <code>GOTCHAS.md</code>, not this UI. No real ENBD data, ever.
+  </div>
+</body>
+</html>

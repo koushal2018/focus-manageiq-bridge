@@ -201,5 +201,16 @@ _(deferred — built last)_
 ## Carbon stub
 _(deferred)_
 
+## Web layer
+
+### W-1. Starlette 1.x flipped `Jinja2Templates.TemplateResponse` to request-first
+- **What:** Calling `templates.TemplateResponse("index.html", {"request": request, ...})` on Starlette 1.3.1 (the version pulled in by FastAPI 0.138) fails with `TypeError: unhashable type: 'dict'`. The dict gets passed where the request was expected; starlette then tries to use the request slot as the template name and the dict ends up inside jinja's cache key lookup.
+- **Why it matters:** Every FastAPI tutorial older than 2024 shows the dict-first form. The error message points at jinja2's `LRUCache.__getitem__` — three frames away from the real bug, with no hint that the call site is wrong. Easy to chase for an hour.
+- **EBA action:** Always use the request-first form:
+  ```python
+  templates.TemplateResponse(request, "index.html", {"key": value})
+  ```
+  If you can't avoid older code, pin `starlette<0.27` (FastAPI <0.110 implicitly does this), but the right answer is to update the call sites.
+
 ## Docker-compose / portability
 _(nothing yet)_

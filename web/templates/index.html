@@ -1,0 +1,101 @@
+{% extends "_base.html" %}
+{% block title %}Overview &mdash; ENBD FinOps PoC{% endblock %}
+{% block content %}
+<h1>FOCUS &times; ManageIQ overview</h1>
+<p class="subtitle">
+  Four leadership requirements, four verdicts.
+  Each view below carries an honest banner stating what FOCUS can and can't do.
+</p>
+
+<div class="banner info">
+  <span class="verdict">SCOPE</span>
+  This is a throwaway de-risking spike. The most valuable artifact is
+  <code>GOTCHAS.md</code> (24 entries and growing); the running app is disposable.
+  All data is synthetic and visibly so &mdash;
+  <code>DEMO-</code> prefixes, fake account IDs, no real cloud credentials.
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">FOCUS rows</div>
+    <div class="value">{{ stats.focus_rows }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Resource join map rows</div>
+    <div class="value">{{ stats.join_rows }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Utilization rollups</div>
+    <div class="value">{{ stats.util_rows }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Source clouds</div>
+    <div class="value">3</div>
+  </div>
+</div>
+
+<h2>Join-status distribution</h2>
+<p class="muted">
+  The join is the hardest single thing in this PoC (SPEC &sect;2). Each row in
+  <code>resource_join_map</code> falls into one of five buckets:
+</p>
+<table>
+  <thead>
+    <tr><th>Status</th><th class="num">Rows</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+  {% for s in stats.join_status %}
+    <tr>
+      <td><span class="pill {{ s.status }}">{{ s.status }}</span></td>
+      <td class="num">{{ s.n }}</td>
+      <td class="muted">
+        {% if s.status == 'matched' %}
+          FOCUS cost row joined cleanly to a MIQ VM via uid_ems (AWS/OCI) or ems_ref (Azure).
+        {% elif s.status == 'unmatched_focus_only' %}
+          Cloud cost with no MIQ inventory &mdash; usually a managed service (Bedrock, S3, OpenAI). See GOTCHA J-6.
+        {% elif s.status == 'unmatched_miq_only' %}
+          MIQ VM with no cloud cost &mdash; on-prem-only workload (SPEC &sect;3.1).
+        {% elif s.status == 'no_resource_id' %}
+          Tax, refund, or tenancy-level charge with no resource to attribute.
+        {% elif s.status == 'ambiguous' %}
+          Multiple MIQ VMs share the same cloud ResourceId &mdash; cross-cloud duplicates.
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>The four leadership requirements</h2>
+<table>
+  <thead>
+    <tr><th>#</th><th>Requirement</th><th>FOCUS verdict</th><th>Where to look</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>AI cost by cloud &amp; model</td>
+      <td><span class="pill matched">native</span></td>
+      <td><a href="/views/ai">AI cost view</a></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Resource utilization % + cost</td>
+      <td><span class="pill unmatched_focus_only">partial</span> &mdash; cost yes, util NOT in FOCUS</td>
+      <td><a href="/views/utilization">Utilization view</a></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Cloud vs on-prem + recharge</td>
+      <td><span class="pill unmatched_focus_only">conditional</span> &mdash; FOCUS doesn't source on-prem</td>
+      <td><a href="/views/cloud-vs-onprem">Cloud vs on-prem view</a></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Carbon footprint</td>
+      <td><span class="pill ambiguous">out of scope</span> &mdash; no carbon column in FOCUS v1.4</td>
+      <td><a href="/views/carbon">Carbon view</a></td>
+    </tr>
+  </tbody>
+</table>
+{% endblock %}

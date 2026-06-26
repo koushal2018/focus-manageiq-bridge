@@ -1,0 +1,64 @@
+{% extends "_base.html" %}
+{% block title %}Utilization &times; cost &mdash; ENBD FinOps PoC{% endblock %}
+{% block content %}
+<h1>Utilization &times; cost</h1>
+<p class="subtitle">Leadership requirement #2 &mdash; rightsizing candidates.</p>
+
+<div class="banner warn">
+  <span class="verdict">FOCUS</span>
+  <b>Partial.</b> Cost yes, utilization no &mdash; <em>FOCUS has no utilization
+  column through v1.4</em>. Cost comes from <code>focus_costs</code>. CPU/mem %
+  come from ManageIQ's <code>metric_rollups</code> (joined via the resource map
+  on <code>vms.uid_ems</code> for AWS/OCI and <code>vms.ems_ref</code> for Azure
+  &mdash; GOTCHA J-1). Without an active provider refresh, the appliance returns
+  zero VMs; this view's snapshot was synthesized after LM-1 forced the
+  appliance offline.
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Workload</th>
+      <th>Cloud / vendor</th>
+      <th class="num">Cost</th>
+      <th class="num">Avg CPU %</th>
+      <th class="num">Avg mem %</th>
+      <th class="num">Rollups</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    {% set cpu = r.avg_cpu_pct|float %}
+    {% set mem = r.avg_mem_pct|float %}
+    {% set cost = r.cost|float %}
+    <tr>
+      <td>{{ r.miq_vm_name }}</td>
+      <td class="muted">{{ r.focus_source }} / {{ r.miq_vendor }}</td>
+      <td class="num">{{ '%.2f'|format(cost) }}</td>
+      <td class="num">{{ '%.2f'|format(cpu) }}</td>
+      <td class="num">{{ '%.2f'|format(mem) }}</td>
+      <td class="num muted">{{ r.rollup_samples }}</td>
+      <td class="muted">
+        {% if cpu < 25 and cost > 30 %}
+          <span class="pill unmatched_focus_only">rightsize?</span> low CPU, real cost
+        {% elif mem > 80 %}
+          <span class="pill ambiguous">memory-bound</span>
+        {% else %}
+          &mdash;
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="banner info">
+  <span class="verdict">HOW</span>
+  This is exactly the kind of view ENBD's existing chargeback module hides
+  behind manual reports. The reason FOCUS alone can't produce it: there is no
+  <code>Utilization</code> column in the FOCUS spec, full stop &mdash; verified against
+  focus.finops.org v1.3/v1.4. Don't try to extend FOCUS to carry it; keep utilization
+  in <code>miq_utilization</code> and join at the view layer.
+</div>
+{% endblock %}

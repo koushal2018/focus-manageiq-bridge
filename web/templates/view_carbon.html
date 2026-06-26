@@ -1,0 +1,63 @@
+{% extends "_base.html" %}
+{% block title %}Carbon &mdash; ENBD FinOps PoC{% endblock %}
+{% block content %}
+<h1>Carbon footprint</h1>
+<p class="subtitle">Leadership requirement #4.</p>
+
+<div class="banner bad">
+  <span class="verdict">FOCUS</span>
+  <b>Out of scope.</b> FOCUS through v1.4 has no carbon, emissions, or energy column.
+  This view is a <em>stub</em>, deliberately. Showing a "carbon number" derived
+  from the cost would be confidently wrong &mdash; exactly the failure mode SPEC &sect;0
+  warns against.
+</div>
+
+<h2>Per-provider carbon feeds (roadmap, not data)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Provider</th>
+      <th>Authoritative feed</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for f in feeds %}
+    <tr>
+      <td>{{ f.provider }}</td>
+      <td>{{ f.feed }}</td>
+      <td class="muted">{{ f.status }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Layout placeholder &mdash; do NOT trust these numbers</h2>
+<div class="banner warn">
+  <span class="verdict">FAKE</span>
+  The kgCO<sub>2</sub>e column below is a hand-rolled ratio applied to cost. It exists
+  only so the page layout is real for slice 8. Real carbon needs real feeds:
+  <a href="https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/ccft-overview.html">AWS CCFT</a>,
+  the Azure Emissions Impact Dashboard, and a custom on-prem model.
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Provider</th>
+      <th class="num">Cost</th>
+      <th>Currency</th>
+      <th class="num">Fake CO<sub>2</sub>e (tonnes)</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in placeholder %}
+    <tr>
+      <td>{{ r.service_provider_name }}</td>
+      <td class="num">{{ '%.2f'|format(r.total_cost|float) }}</td>
+      <td>{{ r.currency }}</td>
+      <td class="num muted">{{ r.fake_co2e_tonnes }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -29,18 +29,18 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-# --- connection env (GOTCHA D-1 exit ramp) ---
-FOCUS_PG_CONTAINER = os.environ.get("FOCUS_PG_CONTAINER", "manageiq_appliance")
+# --- connection env (GOTCHA D-1 exit ramp; defaults now point at the
+# standalone finops_pg container set up after LM-1 retired the appliance) ---
+FOCUS_PG_CONTAINER = os.environ.get("FOCUS_PG_CONTAINER", "finops_pg")
 FOCUS_PG_USER = os.environ.get("FOCUS_PG_USER", "focus_app")
 FOCUS_PG_DB = os.environ.get("FOCUS_PG_DB", "focus")
-# vmdb_production lives on the same Postgres server (the appliance), accessed
-# as the postgres superuser so we can read metric_rollups regardless of grants.
-VMDB_USER = os.environ.get("VMDB_PG_USER", "postgres")
-VMDB_DB = os.environ.get("VMDB_PG_DB", "vmdb_production")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FOCUS_CSV = os.path.join(ROOT, "out", "normalizer", "focus_combined.csv")
 JOIN_CSV = os.path.join(ROOT, "out", "join", "resource_join_map.csv")
+MIQ_UTIL_JSON = os.environ.get(
+    "MIQ_UTIL_JSON", os.path.join(ROOT, "out", "miq", "metric_rollups.json")
+)
 
 
 def run_psql(sql: str, db: str = FOCUS_PG_DB, user: str = FOCUS_PG_USER) -> str:
@@ -239,37 +239,32 @@ def load_join_map() -> int:
     return 0
 
 
-# --- miq_utilization loader (cross-DB) ---
+# --- miq_utilization loader (JSON snapshot post-LM-1) ---
 
 def load_miq_utilization() -> int:
-    """Pull rollups from vmdb_production for our seeded VMs (id >= 90000)
-    and INSERT into focus.miq_utilization.
+    """Load metric_rollups from the JSON snapshot at MIQ_UTIL_JSON.
 
-    GOTCHA J-3: pin resource_type='VmOrTemplate'.
-    GOTCHA D-1: vmdb is on the same server, so we can use postgres_fdw or
-    just two psql calls. We go with two psql calls --- no extension needed.
+    Originally this cross-DB-pulled from the appliance's vmdb_production
+    (GOTCHA J-3 pin on resource_type='VmOrTemplate' applied at extract).
+    LM-1 retired the appliance; join/miq_snapshot.py now synthesizes the
+    same data deterministically from generators/common.WORKLOADS, and we
+    just load that here.
     """
-    # Read rollups as CSV from vmdb_production
-    select_sql = (
-        "SELECT resource_id AS miq_vm_id, timestamp, capture_interval, "
-        "cpu_usage_rate_average, mem_usage_absolute_average, resource_name "
-        "FROM metric_rollups "
-        "WHERE resource_type = 'VmOrTemplate' AND resource_id >= 90000 "
-        "ORDER BY resource_id, timestamp"
-    )
-    # \copy ... to stdout streams rows; pipe into the focus DB \copy
-    export_cmd = [
-        "docker", "exec", "-i", FOCUS_PG_CONTAINER,
-        "psql", "-U", VMDB_USER, "-d", VMDB_DB, "-v", "ON_ERROR_STOP=1",
-        "-c", f"\\COPY ({select_sql}) TO STDOUT WITH (FORMAT csv, HEADER true)",
-    ]
-    export = subprocess.run(export_cmd, capture_output=True, text=True)
-    if export.returncode != 0:
-        raise RuntimeError(f"vmdb export failed: {export.stderr}")
+    with open(MIQ_UTIL_JSON) as f:
+        rows = json.load(f)
 
-    csv_bytes = export.stdout.encode()
+    # Build a CSV in memory matching the table column order.
+    import io
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=[
+        "miq_vm_id", "timestamp", "capture_interval",
+        "cpu_usage_pct", "mem_usage_pct", "resource_name",
+    ])
+    w.writeheader()
+    for r in rows:
+        w.writerow({k: r.get(k, "") for k in w.fieldnames})
 
-    import_cmd = [
+    cmd = [
         "docker", "exec", "-i", FOCUS_PG_CONTAINER,
         "psql", "-U", FOCUS_PG_USER, "-d", FOCUS_PG_DB, "-v", "ON_ERROR_STOP=1",
         "-c",
@@ -277,10 +272,9 @@ def load_miq_utilization() -> int:
         "(miq_vm_id, timestamp, capture_interval, cpu_usage_pct, mem_usage_pct, resource_name) "
         "FROM STDIN WITH (FORMAT csv, HEADER true)",
     ]
-    proc = subprocess.run(import_cmd, input=csv_bytes, capture_output=True)
+    proc = subprocess.run(cmd, input=buf.getvalue().encode(), capture_output=True)
     if proc.returncode != 0:
         raise RuntimeError(f"miq_utilization import failed: {proc.stderr.decode()}")
-
     out = (proc.stdout or b"").decode()
     for line in out.splitlines():
         if line.strip().startswith("COPY "):
@@ -312,7 +306,7 @@ def main() -> None:
     print(f"[loader] resource_join_map: {n_join} rows")
 
     # 4. miq_utilization
-    print("[loader] loading miq_utilization from appliance vmdb_production...")
+    print(f"[loader] loading miq_utilization from {MIQ_UTIL_JSON}")
     n_util = load_miq_utilization()
     print(f"[loader] miq_utilization: {n_util} rows")
 

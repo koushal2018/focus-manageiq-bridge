@@ -65,9 +65,21 @@ def build(
     focus_csv_path: str,
     miq_vms: list[dict] | None = None,
 ) -> list[JoinRow]:
+    """Build the join. miq_vms source priority:
+       1. Argument (caller-provided list of dicts)
+       2. MIQ_VMS_JSON env var --- path to a JSON file (synthesized snapshot)
+       3. Live appliance via miq_client.get_vms()
+    Snapshot path is the default since LM-1 retired the live appliance.
+    """
     focus_rows = _load_focus_rows(focus_csv_path)
     if miq_vms is None:
-        miq_vms = miq_client.get_vms()
+        import json as _json
+        snapshot = os.environ.get("MIQ_VMS_JSON")
+        if snapshot:
+            with open(snapshot) as f:
+                miq_vms = _json.load(f)
+        else:
+            miq_vms = miq_client.get_vms()
 
     # Aggregate focus rows by (source, resource_id) to collapse 24h of EC2
     # hourly rows into one join key. We sum BilledCost across the group so
