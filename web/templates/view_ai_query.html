@@ -2,15 +2,18 @@
 {% block title %}NL query &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
 
-<h1 class="display rise">Ask in language,<br><em>answer in SQL.</em></h1>
-<p class="lede rise delay-1">
-  Optional Bedrock layer (SPEC &sect;3.6). Canned queries run unconditionally;
-  free-text is gated behind a parser-level SQL allowlist so wrong-cost-
-  with-confident-narration cannot happen by accident.
+<h1 class="display rise">
+  Ask in language,<br>
+  <em>answer in SQL.</em>
+</h1>
+<p class="lede rise d-1">
+  Optional Bedrock layer (SPEC&nbsp;&sect;3.6). Canned queries run
+  unconditionally; free-text is gated behind a parser-level SQL allowlist
+  so <em>wrong-cost-with-confident-narration</em> cannot happen by accident.
 </p>
 
 {% if not bedrock_enabled %}
-<div class="banner warn rise delay-1">
+<div class="banner warn rise d-1">
   <span class="verdict">ai off</span>
   <div>
     Bedrock NL-query is disabled this session (<code>BEDROCK_DISABLED=1</code>).
@@ -20,29 +23,30 @@
   </div>
 </div>
 {% else %}
-<div class="banner info rise delay-1">
+<div class="banner info rise d-1">
   <span class="verdict">ai on</span>
   <div>
     Free-text mode active. Region: <code>{{ region }}</code>. Model:
-    <code>{{ model }}</code>. Every answer shows the SQL it ran and the rows
-    it returned &mdash; no narration without provenance.
+    <code>{{ model }}</code>. Every answer shows the SQL it ran and the
+    rows it returned &mdash; no narration without provenance.
   </div>
 </div>
 {% endif %}
 
-<div class="banner bad rise delay-1">
+<div class="banner bad rise d-1">
   <span class="verdict">guard</span>
   <div>
     Every SQL the model produces is parsed by <code>sqlglot</code> in
     <code>ai/sql_guard.py</code>. Rejected unless it is a single SELECT
     against the four-table FinOps allowlist
     (<code>focus_costs</code>, <code>resource_join_map</code>,
-    <code>miq_utilization</code>, <code>miq_onprem_cost</code>). Fails closed.
+    <code>miq_utilization</code>, <code>miq_onprem_cost</code>).
+    Fails closed.
   </div>
 </div>
 
-<h2 class="section rise delay-2">Canned queries (no AI involved)</h2>
-<div class="table-wrap rise delay-2">
+<h2 class="section rise d-2">Canned queries (no AI involved)</h2>
+<div class="table-wrap rise d-2">
 <table>
   <thead>
     <tr><th>Name</th><th>Description</th><th>Params</th><th></th></tr>
@@ -50,7 +54,7 @@
   <tbody>
   {% for q in queries %}
     <tr>
-      <td class="mono">{{ q.name }}</td>
+      <td class="mono"><strong>{{ q.name }}</strong></td>
       <td class="muted">{{ q.description }}</td>
       <td class="mono">
         {% if q.params %}
@@ -68,10 +72,10 @@
 </table>
 </div>
 
-<h2 class="section rise delay-3">Free-text question
+<h2 class="section rise d-3">Free-text question
   {% if not bedrock_enabled %}<span class="pill no_resource_id">disabled</span>{% endif %}
 </h2>
-<form id="ask-form" class="rise delay-3" {% if not bedrock_enabled %}style="opacity:.55"{% endif %}>
+<form id="ask-form" class="rise d-3" {% if not bedrock_enabled %}style="opacity: .55"{% endif %}>
   <textarea id="question"
             placeholder="e.g. Which workloads cost the most relative to their CPU utilization?"
             {% if not bedrock_enabled %}disabled{% endif %}></textarea>
@@ -80,48 +84,49 @@
   </button>
 </form>
 
-<div id="result" style="margin-top: 28px;"></div>
+<div id="result" style="margin-top: 32px;"></div>
 
 <style>
   button.run-btn, button.primary-btn {
-    background: var(--bg-glass-2);
-    color: var(--ink-bright);
-    border: 1px solid var(--seam-strong);
+    background: transparent;
+    color: var(--aurora-cyan);
+    border: 1px solid rgba(78, 192, 255, 0.35);
     border-radius: 999px;
     padding: 6px 14px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: 10.5px;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.14em;
     cursor: pointer;
-    transition: all .2s var(--ease-glide);
+    transition: all .25s var(--ease-glide);
   }
   button.run-btn:hover, button.primary-btn:hover:not(:disabled) {
-    background: var(--molten);
-    color: var(--bg-deep);
+    color: var(--night-deep);
+    background: linear-gradient(110deg, var(--aurora-jade), var(--aurora-cyan), var(--aurora-violet));
     border-color: transparent;
+    box-shadow: 0 0 24px rgba(78, 192, 255, 0.4);
   }
-  button.primary-btn { padding: 10px 22px; margin-top: 14px; font-size: 12px; }
+  button.primary-btn { padding: 10px 24px; margin-top: 14px; font-size: 11.5px; }
   button.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   textarea#question {
     width: 100%;
     min-height: 88px;
-    background: var(--bg-rise);
-    color: var(--ink-bright);
-    border: 1px solid var(--seam);
+    background: linear-gradient(180deg, var(--night-rise) 0%, var(--night-rise-2) 100%);
+    color: var(--ink-aurora);
+    border: 1px solid var(--night-edge);
     border-radius: var(--radius-md);
     padding: 14px 16px;
-    font-family: 'Inter', sans-serif;
+    font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     line-height: 1.5;
     resize: vertical;
     outline: none;
-    transition: border-color .2s var(--ease-glide), box-shadow .2s var(--ease-glide);
+    transition: border-color .25s, box-shadow .25s;
   }
   textarea#question:focus {
-    border-color: var(--molten-2);
-    box-shadow: 0 0 0 3px rgba(70, 196, 255, 0.08);
+    border-color: var(--aurora-cyan);
+    box-shadow: 0 0 0 3px rgba(78, 192, 255, 0.10);
   }
 </style>
 
@@ -137,7 +142,7 @@
     return {ok: r.ok, status: r.status, data};
   }
   function renderRows(rows) {
-    if (!rows || !rows.length) return '<p class="muted"><em>(0 rows)</em></p>';
+    if (!rows || !rows.length) return '<p><span class="mono" style="color:var(--ink-quiet)">(0 rows)</span></p>';
     const cols = Object.keys(rows[0]);
     let h = '<div class="table-wrap"><table><thead><tr>';
     for (const c of cols) h += '<th>' + c + '</th>';
@@ -146,7 +151,7 @@
       h += '<tr>';
       for (const c of cols) {
         const v = r[c];
-        h += '<td>' + (v === null ? '<em class="muted">null</em>' : String(v)) + '</td>';
+        h += '<td>' + (v === null ? '<span class="muted">null</span>' : String(v)) + '</td>';
       }
       h += '</tr>';
     }

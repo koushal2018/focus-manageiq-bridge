@@ -2,26 +2,29 @@
 {% block title %}Carbon &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
 
-<h1 class="display rise">Carbon,<br><em>honestly absent.</em></h1>
-<p class="lede rise delay-1">
-  Leadership requirement #4. FOCUS through v1.4 has no carbon, emissions,
-  or energy column &mdash; so this view is a roadmap to the four real data
-  streams, not a number we made up.
+<h1 class="display rise">
+  Carbon,<br>
+  <em>honestly absent.</em>
+</h1>
+<p class="lede rise d-1">
+  Leadership requirement&nbsp;IV. FOCUS through v1.4 has no carbon,
+  emissions, or energy column &mdash; so this view is a roadmap to the
+  four real data streams, not a number we made up.
 </p>
 
-<div class="banner bad rise delay-1">
+<div class="banner bad rise d-1">
   <span class="verdict">out of focus</span>
   <div>
     A carbon number derived from FOCUS cost alone would be confidently
-    wrong &mdash; the failure mode SPEC &sect;0 warns against. The honest
-    answer is to keep carbon data <em>next to</em> the FOCUS table, joined
-    at the view layer, and to tell leadership the data quality of each
-    stream up front.
+    wrong &mdash; the failure mode SPEC&nbsp;&sect;0 warns against. The
+    honest answer is to keep carbon data <em>next to</em> the FOCUS
+    table, joined at the view layer, and to tell leadership the data
+    quality of each stream up front.
   </div>
 </div>
 
-<h2 class="section rise delay-2">Per-provider feeds (roadmap)</h2>
-<div class="table-wrap rise delay-2">
+<h2 class="section rise d-2">Per-provider feeds (roadmap)</h2>
+<div class="table-wrap rise d-2">
 <table>
   <thead>
     <tr><th>Provider</th><th>Feed</th><th>Status</th></tr>
@@ -29,7 +32,7 @@
   <tbody>
   {% for f in feeds %}
     <tr>
-      <td>{{ f.provider }}</td>
+      <td><strong>{{ f.provider }}</strong></td>
       <td>{{ f.feed }}</td>
       <td class="muted">{{ f.status }}</td>
     </tr>
@@ -38,17 +41,20 @@
 </table>
 </div>
 
-<h2 class="section rise delay-3">Layout placeholder &mdash; <span style="color:var(--bad-rust)">do not trust these numbers</span></h2>
-<div class="banner warn rise delay-3">
+<h2 class="section rise d-3">Layout placeholder
+  &mdash; <span style="color: var(--bad)">do not trust these numbers</span>
+</h2>
+<div class="banner warn rise d-3">
   <span class="verdict">fake</span>
   <div>
     The carbon column below is a hand-rolled ratio applied to cost. It
-    exists only so the page layout is real for slice 8. Real carbon needs
-    real feeds: <a class="subtle" href="https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/ccft-overview.html">AWS CCFT</a>,
+    exists only so the page layout is real. Real carbon needs real
+    feeds:
+    <a class="subtle" href="https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/ccft-overview.html">AWS CCFT</a>,
     the Azure Emissions Impact Dashboard, and a custom on-prem model.
   </div>
 </div>
-<div class="table-wrap rise delay-3">
+<div class="table-wrap rise d-3">
 <table>
   <thead>
     <tr>
@@ -61,7 +67,7 @@
   <tbody>
   {% for r in placeholder %}
     <tr>
-      <td>{{ r.service_provider_name }}</td>
+      <td><strong>{{ r.service_provider_name }}</strong></td>
       <td class="num">{{ '%.2f'|format(r.total_cost|float) }}</td>
       <td class="muted">{{ r.currency }}</td>
       <td class="num muted">{{ r.fake_co2e_tonnes }}</td>

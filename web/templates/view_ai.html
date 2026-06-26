@@ -2,26 +2,29 @@
 {% block title %}AI cost &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
 
-<h1 class="display rise">AI cost,<br><em>per model.</em></h1>
-<p class="lede rise delay-1">
-  Leadership requirement #1. Bedrock and Azure OpenAI surface natively
-  through <code>ServiceCategory='AI and Machine Learning'</code>. OCI's
-  generative-AI service joins through the same normalized column.
+<h1 class="display rise">
+  AI cost,<br>
+  <em>per model.</em>
+</h1>
+<p class="lede rise d-1">
+  Leadership requirement&nbsp;I. Bedrock, Azure OpenAI, and OCI
+  generative&#8209;AI all surface natively through
+  <code>ServiceCategory = 'AI and Machine Learning'</code>.
 </p>
 
-<div class="banner good rise delay-1">
+<div class="banner good rise d-1">
   <span class="verdict">native</span>
   <div>
-    FOCUS-native. The Bedrock model identifier is preserved through the
-    normalizer's enrichment step: <code>arn:aws:bedrock:&hellip;:foundation-model/&lt;id&gt;</code>
-    becomes the <code>SkuMeter</code>. No join with ManageIQ is needed for
-    this view &mdash; managed services have no VM equivalent in MIQ inventory,
-    and that is correct, not a bug.
+    The Bedrock model id is preserved by the normalizer's enrichment:
+    <code>arn:aws:bedrock:&hellip;:foundation-model/&lt;id&gt;</code> becomes
+    the <code>SkuMeter</code>. No ManageIQ join is needed here &mdash;
+    managed services have no VM equivalent in MIQ inventory, and that is
+    correct, not a bug.
   </div>
 </div>
 
-<h2 class="section rise delay-2">By provider and model</h2>
-<div class="table-wrap rise delay-2">
+<h2 class="section rise d-2">By provider and model</h2>
+<div class="table-wrap rise d-2">
 <table>
   <thead>
     <tr>
@@ -36,7 +39,7 @@
   <tbody>
   {% for r in rows %}
     <tr>
-      <td>{{ r.service_provider_name }}</td>
+      <td><strong>{{ r.service_provider_name }}</strong></td>
       <td class="mono">{{ r.sku_meter }}</td>
       <td class="muted">{{ r.service_name }}</td>
       <td class="num muted">{{ r.row_count }}</td>

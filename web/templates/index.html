@@ -2,118 +2,130 @@
 {% block title %}Overview &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
 
-<h1 class="display rise">Four requirements,<br><em>four honest verdicts.</em></h1>
-<p class="lede rise delay-1">
+<h1 class="display rise">
+  Four requirements,<br>
+  <em>four honest verdicts.</em>
+</h1>
+<p class="lede rise d-1">
   A multi-cloud FinOps surface for Emirates NBD. Cost data normalized to
-  FOCUS v1.3, joined to ManageIQ inventory, with each view stating where its
-  data comes from and what the spec can and cannot answer.
+  FOCUS&nbsp;v1.3, joined to ManageIQ inventory, with each view stating
+  <em>where its data comes from</em> and what the spec can and cannot
+  answer.
 </p>
 
+<h2 class="section rise d-2">The verdict ribbon</h2>
+<section class="ribbon rise d-3" aria-label="Leadership requirements">
+  <div class="ribbon-arc" aria-hidden="true">
+    <svg viewBox="0 0 1200 320" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="auroraArc" x1="0" y1="0.5" x2="1" y2="0.5">
+          <stop offset="0%"   stop-color="#4be8a8"/>
+          <stop offset="33%"  stop-color="#4ec0ff"/>
+          <stop offset="66%"  stop-color="#a36bff"/>
+          <stop offset="100%" stop-color="#ff7eb6"/>
+        </linearGradient>
+      </defs>
+      <!-- Soft halo first, then a thinner arc on top -->
+      <path class="arc-path glow" stroke="url(#auroraArc)"
+            d="M -50 220 Q 200 50, 600 160 T 1250 100"/>
+      <path class="arc-path" stroke="url(#auroraArc)"
+            d="M -50 220 Q 200 50, 600 160 T 1250 100"/>
+    </svg>
+  </div>
+
+  <div class="ribbon-nodes">
+    <a class="node" data-tone="good" href="/views/ai">
+      <span class="roman">I</span>
+      <h3>AI cost by cloud &amp; model</h3>
+      <span class="desc">
+        Per-model totals for Bedrock, Azure OpenAI, OCI generative-AI &mdash;
+        with input and output token splits.
+      </span>
+      <span class="verdict">FOCUS native</span>
+    </a>
+
+    <a class="node" data-tone="warn" href="/views/utilization">
+      <span class="roman">II</span>
+      <h3>Resource utilization &amp; cost</h3>
+      <span class="desc">
+        Average CPU and memory %, per workload, joined to its cloud cost
+        &mdash; the rightsizing surface.
+      </span>
+      <span class="verdict">Partial &mdash; util not in FOCUS</span>
+    </a>
+
+    <a class="node" data-tone="info" href="/views/cloud-vs-onprem">
+      <span class="roman">III</span>
+      <h3>Cloud vs on&#8209;prem cost</h3>
+      <span class="desc">
+        Cloud half FOCUS-native; on-prem half from ManageIQ's recharge
+        model. The two halves live side by side.
+      </span>
+      <span class="verdict">Conditional</span>
+    </a>
+
+    <a class="node" data-tone="bad" href="/views/carbon">
+      <span class="roman">IV</span>
+      <h3>Carbon footprint</h3>
+      <span class="desc">
+        FOCUS has no carbon column through v1.4. We hand back a roadmap
+        to the four real data streams &mdash; not a number we made up.
+      </span>
+      <span class="verdict">Out of FOCUS</span>
+    </a>
+  </div>
+</section>
+
+<h2 class="section rise d-3">Pipeline snapshot</h2>
 <div class="stat-grid">
-  <div class="lozenge stat rise delay-1">
+  <div class="panel stat rise d-3">
     <span class="label">FOCUS rows</span>
     <span class="value">{{ stats.focus_rows }}</span>
-    <span class="note">Cost &amp; usage rows normalized from AWS CUR, Azure cost export, and OCI usage reports.</span>
+    <span class="note">
+      Cost &amp; usage rows normalized from AWS CUR, Azure cost export,
+      and OCI usage reports.
+    </span>
   </div>
-  <div class="lozenge stat rise delay-2">
+  <div class="panel stat rise d-4">
     <span class="label">Join map</span>
     <span class="value">{{ stats.join_rows }}</span>
-    <span class="note">Resolved FOCUS &harr; ManageIQ identity rows, including the failure modes.</span>
+    <span class="note">
+      Resolved FOCUS &harr; ManageIQ identity rows, including every
+      failure mode the join can produce.
+    </span>
   </div>
-  <div class="lozenge stat rise delay-3">
-    <span class="label">Utilization rollups</span>
+  <div class="panel stat rise d-5">
+    <span class="label">Utilization</span>
     <span class="value">{{ stats.util_rows }}</span>
-    <span class="note">Hourly CPU and memory samples per VM &mdash; sourced from ManageIQ, not FOCUS.</span>
+    <span class="note">
+      Hourly CPU and memory samples per VM &mdash; sourced from ManageIQ,
+      not FOCUS.
+    </span>
   </div>
-  <div class="lozenge stat rise delay-4">
+  <div class="panel stat rise d-6">
     <span class="label">Source clouds</span>
-    <span class="value"><em>3</em></span>
-    <span class="note">AWS, Azure, OCI. The on-prem footprint joins through ManageIQ.</span>
+    <span class="value"><em>iii</em></span>
+    <span class="note">
+      AWS, Azure, OCI. The on-prem footprint joins through ManageIQ
+      inventory.
+    </span>
   </div>
 </div>
 
-<h2 class="section rise delay-2">Join distribution &mdash; the central question</h2>
-<div class="rise delay-3">
+<h2 class="section rise d-4">Join distribution &mdash; the central question</h2>
+<div class="panel rise d-4" style="padding: 32px 36px;">
 {% for s in stats.join_status %}
   {% set widest = stats.join_status|map(attribute='n')|max %}
   {% set pct = (s.n / widest * 100) if widest else 0 %}
   <div class="join-bar">
     <span class="name">{{ s.status }}</span>
     <span class="track">
-      <span class="fill" style="width: {{ pct }}%; animation-delay: {{ 0.4 + loop.index0 * 0.12 }}s;"></span>
+      <span class="fill"
+            style="width: {{ pct }}%; animation-delay: {{ 0.6 + loop.index0 * 0.12 }}s;"></span>
     </span>
     <span class="count">{{ s.n }}</span>
   </div>
 {% endfor %}
-</div>
-
-<h2 class="section rise delay-3">The four leadership requirements</h2>
-<div class="req-grid rise delay-4">
-
-  <article class="lozenge req-card">
-    <div class="num">01</div>
-    <div class="body">
-      <h3>AI cost by cloud and by model</h3>
-      <p class="desc">
-        Per-model totals for Bedrock, Azure OpenAI, and OCI generative AI,
-        with input and output token splits. <strong>FOCUS handles this natively</strong> via
-        <code>ServiceCategory='AI and Machine Learning'</code>.
-      </p>
-    </div>
-    <div class="actions">
-      <span class="pill matched">native</span>
-      <a href="/views/ai">Open view &rarr;</a>
-    </div>
-  </article>
-
-  <article class="lozenge req-card">
-    <div class="num">02</div>
-    <div class="body">
-      <h3>Resource utilization &times; cost</h3>
-      <p class="desc">
-        Average CPU and memory percentage per workload, joined to its cloud
-        cost &mdash; the rightsizing surface.
-        <strong>FOCUS doesn't carry utilization</strong>; ManageIQ does.
-      </p>
-    </div>
-    <div class="actions">
-      <span class="pill unmatched_focus_only">partial</span>
-      <a href="/views/utilization">Open view &rarr;</a>
-    </div>
-  </article>
-
-  <article class="lozenge req-card">
-    <div class="num">03</div>
-    <div class="body">
-      <h3>Cloud vs on-prem cost</h3>
-      <p class="desc">
-        Cloud-side from <code>focus_costs</code>; on-prem from ManageIQ's
-        recharge model. <strong>FOCUS doesn't source on-prem data</strong>;
-        the rates live next to it, not inside it.
-      </p>
-    </div>
-    <div class="actions">
-      <span class="pill unmatched_focus_only">conditional</span>
-      <a href="/views/cloud-vs-onprem">Open view &rarr;</a>
-    </div>
-  </article>
-
-  <article class="lozenge req-card">
-    <div class="num">04</div>
-    <div class="body">
-      <h3>Carbon footprint</h3>
-      <p class="desc">
-        <strong>FOCUS has no carbon column</strong> through v1.4. The view is
-        a roadmap to the four real data streams (CCFT, Azure Emissions, OCI
-        estimate, on-prem PUE model) &mdash; not a number.
-      </p>
-    </div>
-    <div class="actions">
-      <span class="pill ambiguous">out of FOCUS</span>
-      <a href="/views/carbon">Open view &rarr;</a>
-    </div>
-  </article>
-
 </div>
 
 {% endblock %}

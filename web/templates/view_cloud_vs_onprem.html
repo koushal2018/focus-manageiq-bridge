@@ -2,26 +2,30 @@
 {% block title %}Cloud &times; on-prem &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
 
-<h1 class="display rise">Cloud and on-prem,<br><em>side by side.</em></h1>
-<p class="lede rise delay-1">
-  Leadership requirement #3. The cloud half is FOCUS-native, grouped by
-  provider. The on-prem half is ManageIQ's recharge model &mdash; a vCPU
-  rate plus a memory-GB rate, persisted as if it were a FOCUS row.
+<h1 class="display rise">
+  Cloud and on-prem,<br>
+  <em>side by side.</em>
+</h1>
+<p class="lede rise d-1">
+  Leadership requirement&nbsp;III. The cloud half is FOCUS-native,
+  grouped by provider. The on-prem half is ManageIQ's recharge model
+  &mdash; a vCPU rate plus a memory-GB rate, persisted as if it were a
+  FOCUS row.
 </p>
 
-<div class="banner warn rise delay-1">
+<div class="banner info rise d-1">
   <span class="verdict">conditional</span>
   <div>
     FOCUS is provider-agnostic but does not <em>source</em> on-prem data.
-    The cloud half below is from <code>focus_costs</code>; the on-prem
-    half is from <code>miq_onprem_cost</code>, populated by
-    <code>onprem/cost_model.py</code>. The rates are stubs &mdash; the EBA
+    The cloud half is from <code>focus_costs</code>; the on-prem half is
+    from <code>miq_onprem_cost</code>, populated by
+    <code>onprem/cost_model.py</code>. Rates are stubs &mdash; the EBA
     team replaces them with the chargeback owner's real values.
   </div>
 </div>
 
-<h2 class="section rise delay-2">Cloud cost</h2>
-<div class="table-wrap rise delay-2">
+<h2 class="section rise d-2">Cloud cost</h2>
+<div class="table-wrap rise d-2">
 <table>
   <thead>
     <tr>
@@ -35,7 +39,7 @@
   <tbody>
   {% for r in cloud %}
     <tr>
-      <td>{{ r.service_provider_name }}</td>
+      <td><strong>{{ r.service_provider_name }}</strong></td>
       <td class="muted">{{ r.source }}</td>
       <td class="num muted">{{ r.row_count }}</td>
       <td class="num">{{ '%.2f'|format(r.total_cost|float) }}</td>
@@ -46,8 +50,8 @@
 </table>
 </div>
 
-<h2 class="section rise delay-3">On-prem recharge <span class="pill unmatched_focus_only">estimated</span></h2>
-<div class="banner info rise delay-3">
+<h2 class="section rise d-3">On-prem recharge <span class="pill unmatched_focus_only">estimated</span></h2>
+<div class="banner warn rise d-3">
   <span class="verdict">calc</span>
   <div>
     ENBD's existing per-resource formula: vCPU rate &plus; memory-GB rate.
@@ -57,7 +61,7 @@
   </div>
 </div>
 
-<div class="table-wrap rise delay-3">
+<div class="table-wrap rise d-3">
 <table>
   <thead>
     <tr>
@@ -73,7 +77,7 @@
   <tbody>
   {% for r in on_prem %}
     <tr>
-      <td>{{ r.miq_vm_name }}</td>
+      <td><strong>{{ r.miq_vm_name }}</strong></td>
       <td class="muted">{{ r.business_unit }}</td>
       <td class="num">{{ r.cpu_cores }}</td>
       <td class="num">{{ r.memory_gb }}</td>

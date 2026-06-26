@@ -2,31 +2,34 @@
 {% block title %}Utilization &middot; ENBD FinOps PoC{% endblock %}
 {% block content %}
 
-<h1 class="display rise">Utilization,<br><em>against cost.</em></h1>
-<p class="lede rise delay-1">
-  Leadership requirement #2 &mdash; the rightsizing surface. Per-VM averages
-  joined to cloud cost. The candidates that matter are the ones with low
-  CPU and real spend.
+<h1 class="display rise">
+  Utilization,<br>
+  <em>against cost.</em>
+</h1>
+<p class="lede rise d-1">
+  Leadership requirement&nbsp;II &mdash; the rightsizing surface. Per-VM
+  averages joined to cloud cost. The candidates that matter are the ones
+  with <em>low CPU and real spend</em>.
 </p>
 
-<div class="banner warn rise delay-1">
+<div class="banner warn rise d-1">
   <span class="verdict">partial</span>
   <div>
-    Cost yes, utilization no. <strong>FOCUS has no utilization column through v1.4</strong>.
-    Cost comes from <code>focus_costs</code>; CPU and memory percentages come
-    from ManageIQ's <code>metric_rollups</code>, joined on
-    <code>vms.uid_ems</code> for AWS / OCI and <code>vms.ems_ref</code> for
-    Azure &mdash; the join keys differ by provider.
+    Cost yes, utilization no. <strong>FOCUS has no utilization column
+    through v1.4</strong>. Cost from <code>focus_costs</code>; CPU and
+    memory percentages from ManageIQ's <code>metric_rollups</code>,
+    joined on <code>vms.uid_ems</code> for AWS / OCI and
+    <code>vms.ems_ref</code> for Azure &mdash; the join keys differ.
   </div>
 </div>
 
-<h2 class="section rise delay-2">Matched workloads</h2>
-<div class="table-wrap rise delay-2">
+<h2 class="section rise d-2">Matched workloads</h2>
+<div class="table-wrap rise d-2">
 <table>
   <thead>
     <tr>
       <th>Workload</th>
-      <th>Cloud / vendor</th>
+      <th>Cloud</th>
       <th class="num">Cost</th>
       <th class="num">Avg CPU %</th>
       <th class="num">Avg mem %</th>
@@ -40,8 +43,8 @@
     {% set mem  = r.avg_mem_pct|float %}
     {% set cost = r.cost|float %}
     <tr>
-      <td>{{ r.miq_vm_name }}</td>
-      <td class="muted">{{ r.focus_source }} / {{ r.miq_vendor }}</td>
+      <td><strong>{{ r.miq_vm_name }}</strong></td>
+      <td class="muted">{{ r.focus_source }} &middot; {{ r.miq_vendor }}</td>
       <td class="num">{{ '%.2f'|format(cost) }}</td>
       <td class="num">{{ '%.2f'|format(cpu) }}</td>
       <td class="num">{{ '%.2f'|format(mem) }}</td>
@@ -61,12 +64,12 @@
 </table>
 </div>
 
-<div class="banner info rise delay-3">
+<div class="banner info rise d-3">
   <span class="verdict">design</span>
   <div>
-    This is exactly the view ENBD's existing chargeback module hides behind
-    manual reports. FOCUS alone can't produce it &mdash; there is no
-    <code>Utilization</code> column in the spec. Keep utilization in
+    This is exactly the view ENBD's existing chargeback module hides
+    behind manual reports. FOCUS alone can't produce it &mdash; there is
+    no <code>Utilization</code> column in the spec. Keep utilization in
     <code>miq_utilization</code>, join at the view layer. Don't extend
     FOCUS to carry it.
   </div>
