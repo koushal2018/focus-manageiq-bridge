@@ -24,12 +24,12 @@ sys.path.insert(0, ROOT)
 
 
 def main() -> int:
-    # 1. generators — provider-native synthetic exports
-    from generators import aws_cur, azure_cost_export, oci_usage
-    aws_cur.write_csv()
-    azure_cost_export.write_csv()
-    oci_usage.write_csv()
-    print("[seed] generators: wrote AWS/Azure/OCI CSVs")
+    # 1. generators — synthetic data in NATIVE FOCUS export shape (post-NF-1,
+    # what the providers' consoles emit today). The CUR/cost-export generators
+    # still exist for the historical path but the default seed is native FOCUS.
+    from generators import focus_native
+    paths = focus_native.write_all()
+    print(f"[seed] generators: wrote native-FOCUS exports {list(paths)}")
 
     # 2. MIQ inventory + utilization snapshot (appliance retired, LM-1)
     from join import miq_snapshot

@@ -25,28 +25,31 @@ REGISTRY_PATH = os.environ.get(
 # The PoC seed: the three synthetic exports the generators produce. In
 # production these rows come from the admin UI; here we ship them so a fresh
 # `connectors.dispatcher` run has sources to process.
+# Seeded with NATIVE FOCUS exports (post-NF-1) — what the providers' consoles
+# actually produce today. The CUR/cost-export source types still exist (for
+# historical data) but the default demo uses the native-FOCUS path.
 POC_SEED: list[SourceConfig] = [
     SourceConfig(
         source_id="aws-payer-demo",
-        source_type="aws-cur",
-        display_name="AWS — DEMO payer 999900001111",
-        location="out/generators/aws_cur.csv",
+        source_type="aws-focus-export",
+        display_name="AWS — FOCUS 1.2 export (DEMO payer 999900001111)",
+        location="out/generators/focus_aws.csv",
         credential_ref="demo:no-credential-needed-synthetic",
         schedule="daily",
     ),
     SourceConfig(
         source_id="azure-sub-demo",
-        source_type="azure-export",
-        display_name="Azure — DEMO subscription",
-        location="out/generators/azure_cost.csv",
+        source_type="azure-focus-export",
+        display_name="Azure — FOCUS 1.2 export (DEMO subscription)",
+        location="out/generators/focus_azure.csv",
         credential_ref="demo:no-credential-needed-synthetic",
         schedule="daily",
     ),
     SourceConfig(
         source_id="oci-tenancy-demo",
-        source_type="oci-usage",
-        display_name="OCI — DEMO tenancy",
-        location="out/generators/oci_usage.csv",
+        source_type="oci-focus-export",
+        display_name="OCI — FOCUS 1.0 export (DEMO tenancy)",
+        location="out/generators/focus_oci.csv",
         credential_ref="demo:no-credential-needed-synthetic",
         schedule="daily",
     ),

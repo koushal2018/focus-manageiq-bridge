@@ -34,6 +34,11 @@ router = APIRouter(prefix="/connect", tags=["connect"])
 # this list disappears — the location is an S3 prefix / blob URL the admin
 # types, and discover() lists real objects.
 DEMO_LOCATIONS = {
+    # native-FOCUS exports (current path)
+    "aws-focus-export": "out/generators/focus_aws.csv",
+    "azure-focus-export": "out/generators/focus_azure.csv",
+    "oci-focus-export": "out/generators/focus_oci.csv",
+    # provider-native billing formats (historical path)
     "aws-cur": "out/generators/aws_cur.csv",
     "azure-export": "out/generators/azure_cost.csv",
     "oci-usage": "out/generators/oci_usage.csv",

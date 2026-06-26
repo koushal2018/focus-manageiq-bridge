@@ -17,6 +17,7 @@ import os
 
 from connectors.contract import DiscoveredExport, NormalizeResult, SourceConfig
 from normalizer import aws_to_focus, azure_to_focus, oci_to_focus
+from normalizer import focus_native_to_focus
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -72,10 +73,51 @@ class OciUsageAdapter:
         return NormalizeResult(focus_rows=rows, report=report)
 
 
+# --- Native-FOCUS adapters (post-NF-1: providers export FOCUS directly) ---
+# These are the PRODUCTION-shaped path: the export is already FOCUS, so
+# normalize() is near-identity + version-leveling + gap-fill (see
+# normalizer/focus_native_to_focus.py). The CUR/cost-export adapters above
+# remain for HISTORICAL data predating native FOCUS exports.
+
+class _NativeFocusAdapter:
+    """Shared body; subclasses set source_type + _source tag."""
+    source_type = ""
+    _source = ""
+
+    def discover(self, cfg: SourceConfig) -> list[DiscoveredExport]:
+        return _local_export(cfg)
+
+    def normalize(self, cfg: SourceConfig, export: DiscoveredExport) -> NormalizeResult:
+        rows, report = focus_native_to_focus.normalize_csv(export.uri)
+        for r in rows:
+            r["_source"] = self._source
+        return NormalizeResult(focus_rows=rows, report=report)
+
+
+class AwsFocusExportAdapter(_NativeFocusAdapter):
+    source_type = "aws-focus-export"
+    _source = "aws"
+
+
+class AzureFocusExportAdapter(_NativeFocusAdapter):
+    source_type = "azure-focus-export"
+    _source = "azure"
+
+
+class OciFocusExportAdapter(_NativeFocusAdapter):
+    source_type = "oci-focus-export"
+    _source = "oci"
+
+
 # The registry of source TYPES → adapter instances. Adding a new provider type
 # is one line here + one normalizer module. Adding a source INSTANCE is a
 # registry row (see registry.py), no code at all.
 ADAPTERS: dict[str, object] = {
     a.source_type: a
-    for a in (AwsCurAdapter(), AzureExportAdapter(), OciUsageAdapter())
+    for a in (
+        # native-FOCUS (current/production path)
+        AwsFocusExportAdapter(), AzureFocusExportAdapter(), OciFocusExportAdapter(),
+        # provider-native billing formats (historical path)
+        AwsCurAdapter(), AzureExportAdapter(), OciUsageAdapter(),
+    )
 }
