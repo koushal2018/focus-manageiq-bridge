@@ -56,17 +56,9 @@ def utilization_x_cost() -> list[dict]:
 
 
 # --- View 3: Cloud vs on-prem cost ---
-# Requirement #3. Cloud half comes from focus_costs grouped by provider.
-# On-prem half is the slice-6-pending estimate (currently a stub per the
-# user's decision): we read miq_utilization to find on-prem VMs and apply
-# the SPEC §0 calc (vCPU + memory + per-GB cost over 4y).
-#
-# On-prem candidate = a VM in miq_utilization whose join_map row has
-# status='unmatched_miq_only'. The on-prem rate is a stub; slice 6
-# replaces it with chargeback module reads.
-
-ON_PREM_RATE_CPU_USD_PER_CORE_MONTH = 50.0
-ON_PREM_RATE_MEM_USD_PER_GB_MONTH   = 5.0
+# Requirement #3. Cloud half = focus_costs grouped by provider. On-prem
+# half = focus.miq_onprem_cost, populated by onprem/cost_model.py (slice
+# 6; replaces the original "wire to MIQ chargeback module" plan per O-1).
 
 
 def cloud_cost_by_provider() -> list[dict]:
@@ -84,44 +76,62 @@ def cloud_cost_by_provider() -> list[dict]:
 
 
 def onprem_cost_estimate() -> list[dict]:
-    """Stubbed on-prem cost from VMDB shape (cpu_cores + memory_mb).
+    """Read persisted on-prem recharge rows from focus.miq_onprem_cost.
 
-    For each unmatched_miq_only row, we don't actually have cpu_cores in
-    the join map (it's on the appliance side). For the stub view we
-    expose what we DO have: the VM name and vendor, with a placeholder
-    cost based on the workload definitions in generators/common.
+    Per GOTCHA O-1: the rows here come from `onprem/cost_model.py`,
+    not from a live ManageIQ chargeback module (that path died with the
+    appliance per LM-1). The cost model uses ENBD's existing per-resource
+    formula; the EBA team replaces the rate constants with real numbers.
 
-    Slice 6 wires this to real chargeback rates and replaces this entire
-    function.
+    We enrich each row with workload metadata (cpu_cores, memory_mb,
+    util %) by joining to the generators/common.WORKLOADS table in
+    Python --- the appliance is gone so there's nowhere else to look.
     """
-    # We rebuild from generators/common.WORKLOADS since the on-prem VMs
-    # don't land in miq_utilization for the join (their resource_id is
-    # > 90000 in the snapshot too --- they DO have rollups). Let's pull
-    # cpu+mem from the union of miq_utilization (for rollup samples)
-    # AND fall back to common.WORKLOADS for the sizing data.
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from generators import common as gen_common
 
-    rows = []
-    on_prem_workloads = [w for w in gen_common.WORKLOADS if w.is_on_prem_only()]
-    for w in on_prem_workloads:
-        gb = w.memory_mb / 1024.0
-        # 4-year average monthly cost (ENBD's existing ManageIQ formula)
-        monthly_usd = (
-            ON_PREM_RATE_CPU_USD_PER_CORE_MONTH * w.cpu_cores +
-            ON_PREM_RATE_MEM_USD_PER_GB_MONTH * gb
-        )
-        rows.append({
-            "miq_vm_name": w.canonical_name,
-            "business_unit": w.business_unit,
-            "cpu_cores": w.cpu_cores,
-            "memory_gb": round(gb, 1),
-            "monthly_cost_usd": round(monthly_usd, 2),
-            "avg_cpu_pct": w.cpu_pct,
-            "avg_mem_pct": w.mem_pct,
+    by_name = {w.canonical_name: w for w in gen_common.WORKLOADS}
+    persisted = db.query("""
+        SELECT miq_vm_id,
+               sub_account_id,
+               billed_cost::NUMERIC(12,2) AS monthly_cost_usd,
+               billing_currency,
+               charge_period_start,
+               charge_period_end,
+               notes
+        FROM   miq_onprem_cost
+        ORDER  BY billed_cost DESC
+    """)
+
+    # Map miq_vm_id back to a canonical workload to enrich
+    vm_id = 90_001
+    id_to_workload: dict[int, gen_common.Workload] = {}
+    for wl in gen_common.WORKLOADS:
+        id_to_workload[vm_id] = wl
+        vm_id += 1
+        if wl.aws_instance_id and wl.azure_resource_id:
+            vm_id += 1
+
+    out = []
+    for r in persisted:
+        wl = id_to_workload.get(int(r["miq_vm_id"]))
+        if wl is None:
+            continue
+        gb = wl.memory_mb / 1024.0
+        out.append({
+            "miq_vm_name":   wl.canonical_name,
+            "business_unit": wl.business_unit,
+            "cpu_cores":     wl.cpu_cores,
+            "memory_gb":     round(gb, 1),
+            "monthly_cost_usd": float(r["monthly_cost_usd"]),
+            "billing_currency": r["billing_currency"],
+            "avg_cpu_pct":   wl.cpu_pct,
+            "avg_mem_pct":   wl.mem_pct,
+            "period":        f'{r["charge_period_start"].date()} → {r["charge_period_end"].date()}',
+            "rate_notes":    r["notes"],
         })
-    return rows
+    return out
 
 
 # --- View 4: Carbon stub feed ---
