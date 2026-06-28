@@ -11,13 +11,15 @@ from __future__ import annotations
 import base64
 import hmac
 import os
+import time
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from web import queries
+from web import observability as obs
 
 # Slice 7: optional Bedrock NL-query layer. Mounted as a router; works
 # (in canned-query-only mode) even when Bedrock is disabled.
@@ -56,8 +58,10 @@ if os.path.isdir(STATIC_DIR):
 _BA_USER = os.environ.get("BASIC_AUTH_USER", "")
 _BA_PASS = os.environ.get("BASIC_AUTH_PASS", "")
 _BA_ENABLED = bool(_BA_USER and _BA_PASS)
-# /healthz is exempt so load-balancer / CloudFront health checks still pass.
-_BA_EXEMPT = {"/healthz"}
+# /healthz is exempt so load-balancer / CloudFront health checks still pass;
+# /metrics is exempt so an in-cluster Prometheus scraper needs no credentials
+# (it's reached over the cluster network / a ServiceMonitor, not the edge).
+_BA_EXEMPT = {"/healthz", "/metrics"}
 
 
 @app.middleware("http")
@@ -81,8 +85,43 @@ async def _basic_auth(request: Request, call_next):
     )
 
 
+# --- Observability middleware ----------------------------------------------
+# Registered AFTER _basic_auth so it wraps it (FastAPI runs middleware in
+# reverse registration order) — every request, including a 401, is timed,
+# counted, and logged with a request id. Best-effort: never breaks a request.
+@app.middleware("http")
+async def _observe(request: Request, call_next):
+    rid = obs.new_request_id()
+    request.state.request_id = rid
+    start = time.perf_counter()
+    status = 500
+    try:
+        with obs.inflight():
+            response = await call_next(request)
+            status = response.status_code
+            response.headers["X-Request-ID"] = rid
+            return response
+    finally:
+        dur = time.perf_counter() - start
+        path = request.url.path
+        obs.record_request(request.method, path, status, dur)
+        # /metrics and /healthz are noisy; log them at a coarser level by event
+        obs.log_event(
+            "http_request", request_id=rid, method=request.method, path=path,
+            status=status, duration_ms=round(dur * 1000, 2),
+            client=request.client.host if request.client else None)
+
+
 app.include_router(ai_router)
 app.include_router(connect_router)
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus scrape endpoint (text exposition). Exempt from Basic Auth
+    via _BA_EXEMPT so a scraper doesn't need credentials inside the cluster."""
+    return PlainTextResponse(obs.render_prometheus(),
+                             media_type="text/plain; version=0.0.4")
 
 
 @app.get("/login", response_class=HTMLResponse)

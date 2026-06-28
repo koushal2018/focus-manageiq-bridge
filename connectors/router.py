@@ -24,6 +24,12 @@ from connectors import registry, dispatcher, upload_validate
 from connectors.adapters import ADAPTERS, UploadSource, inbox_dir
 from connectors.api_pull import API_PULL_TYPES
 from connectors.contract import SourceConfig
+from web import observability as obs
+
+
+def _rid(request: Request | None) -> str:
+    """Best-effort request id from the observability middleware."""
+    return getattr(getattr(request, "state", None), "request_id", "") if request else ""
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(os.path.dirname(THIS_DIR), "web", "templates")
@@ -172,7 +178,7 @@ def connect_index(request: Request):
 
 
 @router.post("/add")
-def connect_add(body: dict):
+def connect_add(body: dict, request: Request = None):
     """Register a source (writes a registry row) and re-run the dispatcher.
 
     Validation: type must have a registered adapter; source_id must be
@@ -218,6 +224,8 @@ def connect_add(body: dict):
         credential_ref=credential_ref,
         schedule=body.get("schedule", "daily"),
     ))
+    obs.audit("source_add", _rid(request), source_id=source_id,
+              source_type=source_type, location=location)
 
     # Re-run the dispatcher so the new source's rows land immediately. The
     # join + load steps are separate (run by the operator / scheduler); we
@@ -227,7 +235,8 @@ def connect_add(body: dict):
 
 
 @router.post("/upload")
-async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...)):
+async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...),
+                         request: Request = None):
     """Real upload ingestion: validate FOCUS-conformance BEFORE accepting, write
     to the source's inbox, register an upload source if new, run the dispatcher.
     A file that fails validation is never written and never ingested."""
@@ -289,18 +298,23 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
             os.remove(dest)
         except OSError:
             pass
+        obs.audit("upload_rejected", _rid(request), source_id=sid,
+                  filename=basename, bytes=len(raw), reason=str(e))
         return JSONResponse(
             {"ok": False, "error": f"upload rejected at load: {e}. The existing "
              "data was preserved; nothing was changed."},
             status_code=422)
     UploadSource().advance_watermark(
         SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"))
+    obs.audit("upload", _rid(request), source_id=sid, filename=basename,
+              bytes=len(raw), focus_rows=result.get("focus_rows"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}
 
 
 @router.post("/remove")
-def connect_remove(body: dict):
+def connect_remove(body: dict, request: Request = None):
     source_id = (body.get("source_id") or "").strip()
     registry.remove_source(source_id)   # locked read-modify-write (no race)
     result = dispatcher.run()
+    obs.audit("source_remove", _rid(request), source_id=source_id)
     return {"ok": True, "dispatch": result, "sources": _sources_view()}
