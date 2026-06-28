@@ -1,11 +1,11 @@
 {% extends "_base.html" %}
 {% block title %}Connect a source · ENBD FinOps Console{% endblock %}
 {% block extra_css %}
-  form#addf .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
-  form#addf label { display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-dim); }
+  form#addf .grid2, form#upf .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+  form#addf label, form#upf label { display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-dim); }
   form#addf label.wide { grid-column:1 / -1; }
-  form#addf input, form#addf select { background: var(--field, #0e1320); color: var(--ink); border:1px solid var(--rule-strong); padding:9px 11px; font-family:var(--sans); font-size:13.5px; letter-spacing:normal; text-transform:none; outline:none; }
-  form#addf input:focus, form#addf select:focus { border-color: var(--ink-dim); }
+  form#addf input, form#addf select, form#upf input { background: var(--field, #0e1320); color: var(--ink); border:1px solid var(--rule-strong); padding:9px 11px; font-family:var(--sans); font-size:13.5px; letter-spacing:normal; text-transform:none; outline:none; }
+  form#addf input:focus, form#addf select:focus, form#upf input:focus { border-color: var(--ink-dim); }
   button.askbtn, button.rmq { background: transparent; color: var(--ink); border:1px solid var(--rule-strong); padding:6px 14px; font-family:var(--mono); font-size:10.5px; letter-spacing:0.08em; cursor:pointer; }
   button.askbtn { padding:9px 20px; border-color: var(--amber); color: var(--amber); margin-top: 4px; }
   button.rmq { color: var(--crimson); border-color: rgba(185,28,28,.4); padding:4px 11px; }
@@ -18,19 +18,20 @@
   button.rm-no:hover { color: var(--ink); }
   .toast { position:fixed; right:24px; bottom:24px; z-index:80; background:var(--bg-elev); border:1px solid var(--rule-strong); border-left:3px solid var(--jade); padding:12px 16px; font-family:var(--mono); font-size:12px; color:var(--ink); max-width:360px; box-shadow:0 6px 24px rgba(0,0,0,0.4); }
   .toast.err { border-left-color: var(--crimson); }
-  @media (max-width:640px){ form#addf .grid2 { grid-template-columns:1fr; } }
+  @media (max-width:640px){ form#addf .grid2, form#upf .grid2 { grid-template-columns:1fr; } }
 {% endblock %}
 {% block content %}
 
 <div class="banner" role="note">
   <div>
-    <div class="label">Connect &amp; run · PoC scope</div>
+    <div class="label">Connect &amp; run · ingestion</div>
     <div class="text">
-      Onboarding a cloud account is a <strong>registry entry plus a credential reference</strong> — never a code change.
-      In this PoC a registered source reads a local <strong>synthetic</strong> export, so registering one and re-running
-      the dispatcher actually produces rows. <strong>It does not yet perform a live cloud fetch</strong> — that adapter
-      half (<code class="mono" style="color:var(--amber)">discover()</code> over S3/blob + Secrets Manager) is wired in
-      production. The credential field stores a reference string only.
+      <strong>Upload a FOCUS export</strong> (below) and it is validated as FOCUS-conformant,
+      normalized, loaded and joined — the real ingestion path, exercised on
+      <strong>synthetic</strong> data here. Registered generator sources remain as demo seeds.
+      <strong>API-pull connectors are shown but disabled</strong> — they ship in a later release;
+      a credentialed deployment fills them in behind the same contract. Credentials are stored
+      as reference strings only, never inline.
     </div>
   </div>
 </div>
@@ -68,7 +69,7 @@
 <form id="addf">
   <div class="grid2">
     <label>Source type
-      <select id="f-type">{% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
+      <select id="f-type">{% for t in types %}<option value="{{ t }}"{% if t in api_pull_types %} disabled{% endif %}>{{ t }}{% if t in api_pull_types %} — later release{% endif %}</option>{% endfor %}</select>
     </label>
     <label>Source ID<input id="f-id" placeholder="e.g. aws-payer-12345" autocomplete="off"></label>
     <label>Display name<input id="f-name" placeholder="AWS — production payer" autocomplete="off"></label>
@@ -77,6 +78,16 @@
   </div>
   <button id="addb" type="submit" class="askbtn">Register &amp; run dispatcher</button>
 </form>
+
+<div class="section-label"><span class="num">03.</span>Upload a FOCUS export</div>
+<form id="upf" enctype="multipart/form-data">
+  <div class="grid2">
+    <label>Source ID<input id="u-id" placeholder="e.g. upload-aws-june" autocomplete="off"></label>
+    <label>FOCUS export (.csv)<input id="u-file" type="file" accept=".csv"></label>
+  </div>
+  <button id="upb" type="submit" class="askbtn">Validate &amp; ingest</button>
+</form>
+<div id="upload-result" style="margin-top:16px;"></div>
 
 <div id="connect-result" style="margin-top:24px;"></div>
 
@@ -89,6 +100,23 @@
   function banner(label, msg) {
     return '<div class="banner"><div><div class="label">'+label+'</div><div class="text">'+msg+'</div></div></div>';
   }
+  document.getElementById('upf').addEventListener('submit', async e => {
+    e.preventDefault();
+    const sid = document.getElementById('u-id').value.trim();
+    const fileEl = document.getElementById('u-file');
+    const el = document.getElementById('upload-result');
+    if (!sid || !fileEl.files.length) { el.innerHTML = banner('Error', 'Source ID and a file are required.'); return; }
+    const fd = new FormData();
+    fd.append('source_id', sid);
+    fd.append('file', fileEl.files[0]);
+    el.innerHTML = '<p style="color:var(--ink-mid)">Validating &amp; ingesting…</p>';
+    const r = await fetch('/connect/upload', {method:'POST', body:fd});
+    const data = await r.json();
+    if (!r.ok) { el.innerHTML = banner('Rejected', data.error || 'Upload failed'); return; }
+    el.innerHTML = banner('Ingested',
+      'Uploaded export validated and ingested. Dispatcher produced <strong>'+data.dispatch.focus_rows+'</strong> FOCUS rows. Reloading…');
+    setTimeout(() => location.reload(), 1200);
+  });
   document.getElementById('addf').addEventListener('submit', async e => {
     e.preventDefault();
     const body = {

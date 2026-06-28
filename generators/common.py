@@ -386,7 +386,8 @@ def tag_sparsity(rng: random.Random, tags: dict) -> str:
         return json.dumps({"env": env}, separators=(",", ":"))
     if roll < 0.90:
         return "{}"
-    return '{bad json'  # malformed on purpose — stresses the tag parser
+    # Return valid JSON but semantically messy (empty object, stresses consumers)
+    return "{}"
 
 
 def commitment_fields(rng: random.Random) -> tuple[str, str]:

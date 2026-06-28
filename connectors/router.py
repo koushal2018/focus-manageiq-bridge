@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from connectors import registry, dispatcher
-from connectors.adapters import ADAPTERS
+from connectors import registry, dispatcher, upload_validate
+from connectors.adapters import ADAPTERS, UploadSource, inbox_dir
+from connectors.api_pull import API_PULL_TYPES
 from connectors.contract import SourceConfig
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -68,6 +69,7 @@ def connect_index(request: Request):
             "active": "connect",
             "sources": _sources_view(),
             "types": sorted(ADAPTERS.keys()),
+            "api_pull_types": sorted(API_PULL_TYPES),
             "demo_locations": DEMO_LOCATIONS,
         },
     )
@@ -112,6 +114,40 @@ def connect_add(body: dict):
     # join + load steps are separate (run by the operator / scheduler); we
     # report what the dispatch produced.
     result = dispatcher.run()
+    return {"ok": True, "dispatch": result, "sources": _sources_view()}
+
+
+@router.post("/upload")
+async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...)):
+    """Real upload ingestion: validate FOCUS-conformance BEFORE accepting, write
+    to the source's inbox, register an upload source if new, run the dispatcher.
+    A file that fails validation is never written and never ingested."""
+    sid = (source_id or "").strip()
+    if not sid:
+        return JSONResponse({"ok": False, "error": "source_id is required"}, status_code=400)
+
+    raw = await file.read()
+    ok, reason = upload_validate.validate_focus_csv(raw)
+    if not ok:
+        return JSONResponse({"ok": False, "error": reason}, status_code=400)
+
+    # Register an upload source for this id if it doesn't exist yet.
+    existing = {s.source_id for s in registry.load()}
+    if sid not in existing:
+        registry.add_source(SourceConfig(
+            source_id=sid, source_type="upload-focus",
+            display_name=f"Upload — {sid}", location=f"out/uploads/{sid}",
+            credential_ref="upload:no-credential", schedule="manual"))
+
+    # Write the validated bytes into the inbox.
+    d = inbox_dir(sid)
+    dest = os.path.join(d, os.path.basename(file.filename or "upload.csv"))
+    with open(dest, "wb") as f:
+        f.write(raw)
+
+    result = dispatcher.run()
+    UploadSource().advance_watermark(
+        SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}
 
 
