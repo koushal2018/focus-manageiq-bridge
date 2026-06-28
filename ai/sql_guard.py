@@ -143,6 +143,19 @@ def financial_sanity_warnings(sql: str) -> list[str]:
             "cost aggregate on focus_costs does not use the USD-normalized "
             "column; verify currencies are not being mixed."
         )
+    # Join fan-out (B-6): SUM-ing a focus_costs cost column while joining to
+    # miq_utilization multiplies each cost row by the number of utilization
+    # samples per VM (e.g. 24×). The number comes out inflated but plausible.
+    # Pre-aggregating utilization in a subquery/CTE avoids it; we can't prove
+    # that statically, so we warn whenever both appear with a cost aggregate.
+    aggregates_cost = bool(re.search(r"(sum|avg)\s*\(\s*\w*\.?billed_cost", low))
+    if aggregates_cost and "focus_costs" in low and "miq_utilization" in low:
+        warnings.append(
+            "sums a focus_costs cost column while joined to miq_utilization — "
+            "this fans each cost row out by the number of utilization samples "
+            "per VM (often 24×), inflating the total. Pre-aggregate utilization "
+            "in a subquery, or read cost and utilization separately (B-6)."
+        )
     return warnings
 
 

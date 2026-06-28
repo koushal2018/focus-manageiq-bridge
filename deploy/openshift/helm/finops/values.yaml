@@ -25,11 +25,13 @@ db:
   passwordSecretName: "finops-db"
   passwordSecretKey: "password"
 
-# Bedrock NL-query: off unless legal clears me-central-1 residency (B-1).
+# Bedrock NL-query: off by default (fail-closed). Region/model must agree:
+# us-east-1 → us.* inference profile (verified working for the PoC). For an
+# in-Gulf posture switch to the global.* profile and clear residency (B-1).
 bedrock:
   disabled: "1"
   region: "us-east-1"
-  modelId: "global.anthropic.claude-sonnet-4-6"
+  modelId: "us.anthropic.claude-sonnet-4-6"
 
 # Seed runs once as a Job (Helm hook) before the Deployment serves, so the
 # DB is populated. In production the dispatcher runs on a schedule (a

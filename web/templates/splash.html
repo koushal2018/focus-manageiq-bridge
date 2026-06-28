@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CloudLens FinOps — One pane. Every cloud. Every workload.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#15140F;--ink-soft:#3a362d;--paper:#F3EFE6;--cream:#E2DAC4;
+    --accent:#FF5B2E;--accent-deep:#D63E0F;--moss:#3D4E2A;--moss-light:#7A8C5A;
+    --sand:#C9B98E;--lilac:#9B8FD4;--rose:#E89B8A;
+    --border:rgba(21,20,15,0.12);--border-strong:rgba(21,20,15,0.22);
+    --serif:'Fraunces',serif;--sans:'Geist',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;overflow-x:hidden}
+  body{font-family:var(--sans);background:var(--paper);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased;position:relative}
+  .blob{position:fixed;border-radius:50%;filter:blur(80px);opacity:0.5;pointer-events:none;z-index:0;animation:float 18s ease-in-out infinite}
+  .blob.b1{width:520px;height:520px;background:radial-gradient(circle,#FFB89E,transparent 70%);top:-180px;right:-100px}
+  .blob.b2{width:600px;height:600px;background:radial-gradient(circle,#C7D9A8,transparent 70%);bottom:-200px;left:-150px;animation-delay:-6s}
+  .blob.b3{width:380px;height:380px;background:radial-gradient(circle,#D4C5EE,transparent 70%);top:40%;left:35%;animation-delay:-12s;opacity:0.35}
+  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.08)}66%{transform:translate(-30px,20px) scale(0.95)}}
+  @media (prefers-reduced-motion:reduce){.blob{animation:none}}
+  .wrap{position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:0 32px 80px}
+  .topnav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;flex-wrap:wrap;gap:16px}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-mark{width:38px;height:38px;border-radius:50%;background:radial-gradient(circle at 30% 30%,var(--accent),var(--accent-deep));box-shadow:inset -4px -4px 8px rgba(0,0,0,0.3),0 0 20px rgba(255,91,46,0.4)}
+  .logo-text strong{font-family:var(--serif);font-weight:600;font-size:18px;display:block;line-height:1}
+  .logo-text span{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;opacity:0.55;text-transform:uppercase}
+  .nav-cta{display:flex;gap:10px;align-items:center}
+  .btn{padding:10px 20px;border-radius:100px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;transition:all 0.4s cubic-bezier(.34,1.56,.64,1)}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px -6px rgba(21,20,15,0.4)}
+  .btn.ghost{background:transparent;color:var(--ink)}
+  .syn-pill{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;background:rgba(255,91,46,0.12);color:var(--accent-deep);border:1px solid rgba(255,91,46,0.3);padding:6px 12px;border-radius:999px}
+  .hero{display:grid;grid-template-columns:1.3fr 1fr;gap:40px;align-items:center;padding:48px 0 56px}
+  @media (max-width:900px){.hero{grid-template-columns:1fr;gap:28px}}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-deep);margin-bottom:18px}
+  .hero h1{font-family:var(--serif);font-weight:400;font-size:60px;line-height:1.0;letter-spacing:-0.03em;margin-bottom:20px}
+  .hero h1 em{font-family:'Instrument Serif',serif;font-style:italic;color:var(--accent)}
+  @media (max-width:900px){.hero h1{font-size:42px}}
+  .hero p{font-size:16px;color:var(--ink-soft);max-width:520px;line-height:1.6;margin-bottom:28px}
+  .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+  .hero-card{background:linear-gradient(135deg,#15140F 0%,#2a261c 100%);color:var(--paper);border-radius:32px;padding:32px;position:relative;overflow:hidden}
+  .hero-card::before{content:"";position:absolute;top:-80px;right:-50px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(255,91,46,0.35),transparent 65%)}
+  .hc-label{font-family:var(--mono);font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.6;position:relative}
+  .hc-value{font-family:var(--serif);font-size:44px;font-weight:500;letter-spacing:-0.02em;margin-top:8px;position:relative}
+  .hc-value .unit{font-family:var(--mono);font-size:16px;opacity:0.6;margin-right:4px}
+  .hc-meta{font-family:var(--mono);font-size:11px;opacity:0.7;margin-top:8px;position:relative}
+  .hc-mini{display:flex;gap:24px;margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);position:relative}
+  .hc-mini .l{font-family:var(--mono);font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.55}
+  .hc-mini .v{font-family:var(--serif);font-size:22px;font-weight:500;margin-top:4px}
+  .section-title{font-family:var(--serif);font-size:30px;font-weight:500;letter-spacing:-0.02em;margin:32px 0 8px}
+  .section-title em{font-family:'Instrument Serif',serif;font-style:italic;color:var(--accent)}
+  .section-sub{color:var(--ink-soft);font-size:14px;margin-bottom:22px;opacity:0.8}
+  .ledger{background:rgba(255,255,255,0.55);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:28px;overflow:hidden}
+  .ledger-row{display:grid;grid-template-columns:48px 1fr auto;gap:20px;align-items:start;padding:22px 26px;border-bottom:1px solid var(--border)}
+  .ledger-row:last-child{border-bottom:none}
+  .ledger-row .idx{font-family:var(--mono);font-size:12px;color:var(--accent-deep)}
+  .ledger-row .req{font-weight:600;font-size:15.5px}
+  .ledger-row .req small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);font-weight:400;margin-top:5px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.75}
+  .verdict{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:100px;white-space:nowrap}
+  .vd{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .v-native{color:var(--moss);background:rgba(61,78,42,0.12)} .v-native .vd{background:var(--moss)}
+  .v-partial{color:var(--accent-deep);background:rgba(255,91,46,0.12)} .v-partial .vd{background:var(--accent)}
+  .v-cond{color:#7B6FB8;background:rgba(155,143,212,0.14)} .v-cond .vd{background:var(--lilac)}
+  .v-out{color:rgba(21,20,15,0.55);background:rgba(21,20,15,0.06)} .v-out .vd{background:rgba(21,20,15,0.45)}
+  footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:rgba(21,20,15,0.5);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+<div class="wrap">
+  <nav class="topnav">
+    <div class="logo">
+      <span class="logo-mark" aria-hidden="true"></span>
+      <span class="logo-text"><strong>CloudLens</strong><span>FinOps · ENBD</span></span>
+    </div>
+    <div class="nav-cta">
+      <span class="syn-pill">Synthetic · DEMO data</span>
+      <a class="btn ghost" href="/connect/">Connect a source</a>
+      <a class="btn" href="/">Open dashboard →</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <div class="eyebrow">Emirates NBD · Group Technology · 3-day de-risking PoC</div>
+      <h1>One pane.<br>Every cloud.<br><em>Every workload.</em></h1>
+      <p>A read-only console over a FOCUS v1.3-conformant warehouse, joining AWS / Azure / OCI cost to ManageIQ inventory and utilization. It answers four leadership requirements — each with a load-bearing verdict on whether FOCUS handles it natively, partially, conditionally, or not at all. All values synthetic and USD-normalised.</p>
+      <div class="hero-actions">
+        <a class="btn" href="/">Open verdict ledger →</a>
+        <a class="btn ghost" href="/ai/">Ask the data</a>
+      </div>
+    </div>
+    <div class="hero-card">
+      <div class="hc-label">Total billed · all providers</div>
+      <div class="hc-value"><span class="unit">USD</span>{{ "{:,.0f}".format(kpis.total_usd) }}</div>
+      <div class="hc-meta">FOCUS BilledCost + on-prem recharge · synthetic</div>
+      <div class="hc-mini">
+        <div><div class="l">FOCUS rows</div><div class="v">{{ "{:,}".format(kpis.focus_rows) }}</div></div>
+        <div><div class="l">Joined</div><div class="v">{{ kpis.pct_joined }}%</div></div>
+        <div><div class="l">Rightsizing</div><div class="v">{{ kpis.rightsize_count }}</div></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="section-title">Four leadership requirements. Four honest <em>verdicts</em>.</div>
+  <div class="section-sub">Verdicts before numbers — what FOCUS can answer, stated up front.</div>
+  <div class="ledger">
+    <div class="ledger-row"><span class="idx">01</span><span class="req">Unified cost across AWS, Azure, OCI, on-prem<small>Cost allocation · FOCUS BilledCost + recharge</small></span><span class="verdict v-native"><span class="vd"></span>Native</span></div>
+    <div class="ledger-row"><span class="idx">02</span><span class="req">Per-workload utilization joined to cost<small>Efficiency · ManageIQ join on asymmetric ResourceId</small></span><span class="verdict v-partial"><span class="vd"></span>Partial</span></div>
+    <div class="ledger-row"><span class="idx">03</span><span class="req">AI / GenAI spend by model and token type<small>AI cost · conditional on provider tag fidelity</small></span><span class="verdict v-cond"><span class="vd"></span>Conditional</span></div>
+    <div class="ledger-row"><span class="idx">04</span><span class="req">Scope 2 carbon emissions per workload<small>Sustainability · no FOCUS column; feeds inconsistent</small></span><span class="verdict v-out"><span class="vd"></span>Out of FOCUS</span></div>
+  </div>
+
+  <footer>
+    <div>CloudLens FinOps · PoC build v0.5+gotchas.md · <span style="color:var(--accent-deep)">All DEMO- identifiers are synthetic.</span></div>
+    <div>FOCUS v1.3 · FastAPI · Postgres 16 · ManageIQ</div>
+  </footer>
+</div>
+</body>
+</html>

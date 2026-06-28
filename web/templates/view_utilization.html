@@ -1,59 +1,64 @@
 {% extends "_base.html" %}
-{% block title %}Utilization · ENBD FinOps Console{% endblock %}
+{% block title %}Utilization × cost · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<div class="in">
-  <div class="page-eyebrow"><span class="req">REQ 02</span> · Rightsizing</div>
-  <h1 class="title">Utilization, against cost.</h1>
-  <p class="sub">
-    Per-VM averages joined to cloud cost. The candidates that matter are
-    the ones with low CPU and real spend.
-  </p>
-</div>
-
-<div class="banner partial in d1">
-  <span class="tag">Partial</span>
+<div class="banner" role="note">
   <div>
-    Cost yes, utilization no — <strong style="color:var(--tx)">FOCUS has no utilization column through v1.4</strong>.
-    Cost from <code>focus_costs</code>; CPU/mem from ManageIQ
-    <code>metric_rollups</code>, joined on <code>vms.uid_ems</code> for
-    AWS/OCI and <code>vms.ems_ref</code> for Azure — the keys differ.
+    <div class="label">Requirement #02 · Partial</div>
+    <div class="text">
+      Cost yes, utilization no — <strong>FOCUS has no utilization column through v1.4</strong>. Cost from
+      <code class="mono" style="color:var(--amber)">focus_costs</code>; CPU/mem from ManageIQ, joined on
+      <code class="mono" style="color:var(--amber)">uid_ems</code> for AWS/OCI and
+      <code class="mono" style="color:var(--amber)">ems_ref</code> for Azure — the keys differ (gotcha J-1).
+      Click any row to drill into a workload. All cost normalised to <strong>USD</strong>.
+    </div>
   </div>
 </div>
 
-<h2 class="sec in d1">Matched workloads</h2>
-<div class="tbl in d2">
-<table>
+<div class="page-head">
+  <div>
+    <h1>Utilization, against cost</h1>
+    <div class="tag">Per-VM averages joined to cloud cost. Low CPU + real spend = rightsizing candidate.</div>
+  </div>
+  <div class="stamp"><strong>Matched workloads</strong><br>{{ rows|length }} joined VMs<br>click to drill down</div>
+</div>
+
+<hr class="rule">
+
+<div class="section-label"><span class="num">01.</span>Matched workloads</div>
+<table class="data">
   <thead>
-    <tr><th>Workload</th><th>Cloud</th><th class="num">Cost</th><th class="num">CPU %</th><th class="num">Mem %</th><th class="num">Samples</th><th>Signal</th></tr>
+    <tr><th scope="col">Workload</th><th scope="col">Cloud · vendor</th><th scope="col" class="r">Cost (USD)</th><th scope="col" class="r">CPU %</th><th scope="col" class="r">Mem %</th><th scope="col" class="r">Samples</th><th scope="col" class="r">Signal</th></tr>
   </thead>
   <tbody>
   {% for r in rows %}
     {% set cpu = r.avg_cpu_pct|float %}{% set mem = r.avg_mem_pct|float %}{% set cost = r.cost|float %}
-    <tr>
-      <td class="name">{{ r.miq_vm_name }}</td>
-      <td class="muted">{{ r.focus_source }} · {{ r.miq_vendor }}</td>
-      <td class="num">{{ '%.2f'|format(cost) }}</td>
-      <td class="num">{{ '%.2f'|format(cpu) }}</td>
-      <td class="num">{{ '%.2f'|format(mem) }}</td>
-      <td class="num muted">{{ r.rollup_samples }}</td>
-      <td>
-        {% if cpu < 25 and cost > 30 %}<span class="pill rightsize">rightsize</span>
-        {% elif mem > 80 %}<span class="pill memory-bound">memory bound</span>
-        {% else %}<span class="muted">—</span>{% endif %}
+    <tr class="clickable" data-href="/workload/{{ r.miq_vm_id }}">
+      <td class="mono" style="font-size:11.5px">{{ r.miq_vm_name }}</td>
+      <td class="dim">{{ r.focus_source|upper }} · {{ r.miq_vendor }}</td>
+      <td class="r mono">{{ "{:,.2f}".format(cost) }}</td>
+      <td class="r mono"{% if cpu < 25 %} style="color:var(--amber)"{% endif %}>{{ '%.1f'|format(cpu) }}</td>
+      <td class="r mono dim">{{ '%.1f'|format(mem) }}</td>
+      <td class="r mono dim">{{ r.rollup_samples }}</td>
+      <td class="r">
+        {% if cpu < 25 and cost > 30 %}<span class="v-word v-flag" style="font-size:11px"><span class="dot"></span>Rightsize</span>
+        {% elif mem > 80 %}<span class="v-word v-partial" style="font-size:11px"><span class="dot"></span>Mem-bound</span>
+        {% else %}<span class="dim mono" style="font-size:11px">—</span>{% endif %}
       </td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-</div>
 
-<div class="banner conditional in d3">
-  <span class="tag">Design</span>
+<div class="section-label"><span class="num">02.</span>Design note</div>
+<div class="banner slate" role="note">
   <div>
-    The view ENBD's chargeback module hides behind manual reports. FOCUS
-    alone can't produce it — keep utilization in <code>miq_utilization</code>
-    and join at the view layer. Don't extend FOCUS to carry it.
+    <div class="label">Architecture</div>
+    <div class="text">
+      This is the view ENBD's chargeback module hides behind manual reports. FOCUS alone can't produce it — keep
+      utilization in <code class="mono" style="color:var(--ink)">miq_utilization</code> and join at the view layer.
+      Don't extend FOCUS to carry utilization.
+    </div>
   </div>
 </div>
 

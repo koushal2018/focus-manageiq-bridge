@@ -2,44 +2,46 @@
 {% block title %}AI cost · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<div class="in">
-  <div class="page-eyebrow"><span class="req">REQ 01</span> · AI &amp; Machine Learning</div>
-  <h1 class="title">AI cost, per model.</h1>
-  <p class="sub">
-    Bedrock, Azure OpenAI, and OCI generative-AI surface natively through
-    <code style="font-family:var(--mono)">ServiceCategory = 'AI and Machine Learning'</code>.
-  </p>
-</div>
-
-<div class="banner native in d1">
-  <span class="tag">FOCUS native</span>
+<div class="banner" role="note">
   <div>
-    The model id is preserved by the normalizer:
-    <code>arn:aws:bedrock:…:foundation-model/&lt;id&gt;</code> becomes the
-    <code>SkuMeter</code>. No ManageIQ join needed — managed services have
-    no VM in MIQ inventory, which is correct, not a gap.
+    <div class="label">Requirement #03 · Conditional</div>
+    <div class="text">
+      AI / GenAI spend surfaces natively through FOCUS
+      <code class="mono" style="color:var(--amber)">ServiceCategory = 'AI and Machine Learning'</code>. The model id is
+      preserved by the normalizer — a Bedrock <strong>foundation-model ARN</strong> becomes the
+      <code class="mono" style="color:var(--amber)">SkuMeter</code>. No ManageIQ join: managed services have no VM in
+      inventory, which is correct, not a gap. <strong>Conditional</strong> because OCI Gen-AI tags are inconsistent and
+      need regex backfill. All values normalised to <strong>USD</strong>.
+    </div>
   </div>
 </div>
 
-<h2 class="sec in d1">By provider &amp; model</h2>
-<div class="tbl in d2">
-<table>
+<div class="page-head">
+  <div>
+    <h1>AI cost, per model</h1>
+    <div class="tag">Bedrock · Azure OpenAI · OCI generative-AI — per provider, per model meter.</div>
+  </div>
+  <div class="stamp"><strong>FOCUS native</strong><br>ServiceCategory filter<br>No join required</div>
+</div>
+
+<hr class="rule">
+
+<div class="section-label"><span class="num">01.</span>By provider &amp; model</div>
+<table class="data">
   <thead>
-    <tr><th>Provider</th><th>Model meter</th><th>Service</th><th class="num">Rows</th><th class="num">Total cost</th><th>Ccy</th></tr>
+    <tr><th scope="col">Provider</th><th scope="col">Model meter</th><th scope="col">Service</th><th scope="col" class="r">Rows</th><th scope="col" class="r">Total (USD)</th></tr>
   </thead>
   <tbody>
   {% for r in rows %}
     <tr>
-      <td class="name">{{ r.service_provider_name }}</td>
-      <td class="mono">{{ r.sku_meter }}</td>
-      <td class="muted">{{ r.service_name }}</td>
-      <td class="num">{{ r.row_count }}</td>
-      <td class="num">{{ '%.4f'|format(r.total_cost|float) }}</td>
-      <td class="muted">{{ r.billing_currency }}</td>
+      <td>{{ r.service_provider_name }}</td>
+      <td class="mono" style="font-size:11.5px">{{ r.sku_meter }}</td>
+      <td class="dim">{{ r.service_name }}</td>
+      <td class="r mono">{{ r.row_count }}</td>
+      <td class="r mono">{{ "{:,.4f}".format(r.total_cost|float) }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-</div>
 
 {% endblock %}

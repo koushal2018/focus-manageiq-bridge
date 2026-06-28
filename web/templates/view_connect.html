@@ -1,105 +1,93 @@
 {% extends "_base.html" %}
 {% block title %}Connect a source · ENBD FinOps Console{% endblock %}
+{% block extra_css %}
+  form#addf .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+  form#addf label { display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-dim); }
+  form#addf label.wide { grid-column:1 / -1; }
+  form#addf input, form#addf select { background: var(--field, #0e1320); color: var(--ink); border:1px solid var(--rule-strong); padding:9px 11px; font-family:var(--sans); font-size:13.5px; letter-spacing:normal; text-transform:none; outline:none; }
+  form#addf input:focus, form#addf select:focus { border-color: var(--ink-dim); }
+  button.askbtn, button.rmq { background: transparent; color: var(--ink); border:1px solid var(--rule-strong); padding:6px 14px; font-family:var(--mono); font-size:10.5px; letter-spacing:0.08em; cursor:pointer; }
+  button.askbtn { padding:9px 20px; border-color: var(--amber); color: var(--amber); margin-top: 4px; }
+  button.rmq { color: var(--crimson); border-color: rgba(185,28,28,.4); padding:4px 11px; }
+  button.askbtn:hover { background: var(--bg-elev); }
+  button.rmq:hover { background: rgba(185,28,28,.12); }
+  .rm-confirm { display:inline-flex; gap:6px; align-items:center; font-family:var(--mono); font-size:10.5px; }
+  .rm-confirm .q { color: var(--ink-mid); }
+  button.rm-yes { color: var(--crimson); border:1px solid rgba(185,28,28,.5); background:rgba(185,28,28,.12); font-family:var(--mono); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; padding:4px 10px; cursor:pointer; }
+  button.rm-no  { color: var(--ink-mid); border:1px solid var(--rule-strong); background:transparent; font-family:var(--mono); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; padding:4px 10px; cursor:pointer; }
+  button.rm-no:hover { color: var(--ink); }
+  .toast { position:fixed; right:24px; bottom:24px; z-index:80; background:var(--bg-elev); border:1px solid var(--rule-strong); border-left:3px solid var(--jade); padding:12px 16px; font-family:var(--mono); font-size:12px; color:var(--ink); max-width:360px; box-shadow:0 6px 24px rgba(0,0,0,0.4); }
+  .toast.err { border-left-color: var(--crimson); }
+  @media (max-width:640px){ form#addf .grid2 { grid-template-columns:1fr; } }
+{% endblock %}
 {% block content %}
 
-<div class="in">
-  <div class="page-eyebrow">Connect &amp; run</div>
-  <h1 class="title">Connect a data source.</h1>
-  <p class="sub">
-    Onboarding a cloud account is a registry entry plus a credential
-    reference — never a code change. Register a source, the dispatcher
-    normalizes it to FOCUS and loads it.
-  </p>
-</div>
-
-<div class="banner partial in d1">
-  <span class="tag">PoC scope</span>
+<div class="banner" role="note">
   <div>
-    In this PoC a registered source reads a local <strong>synthetic</strong>
-    export, so registering one and re-running the dispatcher actually
-    produces rows. <strong>It does not yet perform a live cloud fetch with the
-    credential you supply</strong> — that adapter half (<code>discover()</code>
-    over S3/blob + Secrets Manager) is wired in production. The credential
-    field stores a reference string only.
+    <div class="label">Connect &amp; run · PoC scope</div>
+    <div class="text">
+      Onboarding a cloud account is a <strong>registry entry plus a credential reference</strong> — never a code change.
+      In this PoC a registered source reads a local <strong>synthetic</strong> export, so registering one and re-running
+      the dispatcher actually produces rows. <strong>It does not yet perform a live cloud fetch</strong> — that adapter
+      half (<code class="mono" style="color:var(--amber)">discover()</code> over S3/blob + Secrets Manager) is wired in
+      production. The credential field stores a reference string only.
+    </div>
   </div>
 </div>
 
-<h2 class="sec in d1">Registered sources</h2>
-<div class="tbl in d2">
-<table>
+<div class="page-head">
+  <div>
+    <h1>Connect a data source</h1>
+    <div class="tag">Register a source, the dispatcher normalizes it to FOCUS and loads it.</div>
+  </div>
+  <div class="stamp"><strong>Registry-driven</strong><br>{{ sources|length }} sources<br>no code change</div>
+</div>
+
+<hr class="rule">
+
+<div class="section-label"><span class="num">01.</span>Registered sources</div>
+<table class="data">
   <thead>
-    <tr><th>Source ID</th><th>Type</th><th>Name</th><th>Location</th><th>Schedule</th><th></th></tr>
+    <tr><th scope="col">Source ID</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Location</th><th scope="col">Schedule</th><th scope="col" class="r"></th></tr>
   </thead>
   <tbody id="src-body">
   {% for s in sources %}
     <tr data-id="{{ s.source_id }}">
-      <td class="mono" style="color:var(--tx)">{{ s.source_id }}</td>
-      <td><span class="pill matched">{{ s.source_type }}</span></td>
-      <td class="muted">{{ s.display_name }}</td>
-      <td class="mono">{{ s.location }}</td>
-      <td class="muted">{{ s.schedule }}</td>
-      <td><button class="rmq" data-id="{{ s.source_id }}">Remove</button></td>
+      <td class="mono" style="font-size:11.5px">{{ s.source_id }}</td>
+      <td class="mono dim" style="font-size:11.5px">{{ s.source_type }}</td>
+      <td class="dim">{{ s.display_name }}</td>
+      <td class="mono dim" style="font-size:11.5px">{{ s.location }}</td>
+      <td class="dim mono" style="font-size:11.5px">{{ s.schedule }}</td>
+      <td class="r"><button class="rmq" data-id="{{ s.source_id }}">Remove</button></td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-</div>
 
-<h2 class="sec in d3">Add a source</h2>
-<form id="addf" class="in d3">
+<div class="section-label"><span class="num">02.</span>Add a source</div>
+<form id="addf">
   <div class="grid2">
     <label>Source type
-      <select id="f-type">
-        {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
-      </select>
+      <select id="f-type">{% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
     </label>
-    <label>Source ID
-      <input id="f-id" placeholder="e.g. aws-payer-12345" autocomplete="off">
-    </label>
-    <label>Display name
-      <input id="f-name" placeholder="AWS — production payer" autocomplete="off">
-    </label>
-    <label>Credential reference
-      <input id="f-cred" placeholder="arn:aws:secretsmanager:… (demo: synthetic)" autocomplete="off">
-    </label>
-    <label class="wide">Location
-      <input id="f-loc" placeholder="(blank = use the synthetic export for this type)" autocomplete="off">
-    </label>
+    <label>Source ID<input id="f-id" placeholder="e.g. aws-payer-12345" autocomplete="off"></label>
+    <label>Display name<input id="f-name" placeholder="AWS — production payer" autocomplete="off"></label>
+    <label>Credential reference<input id="f-cred" placeholder="arn:aws:secretsmanager:… (demo: synthetic)" autocomplete="off"></label>
+    <label class="wide">Location<input id="f-loc" placeholder="(blank = use the synthetic export for this type)" autocomplete="off"></label>
   </div>
   <button id="addb" type="submit" class="askbtn">Register &amp; run dispatcher</button>
 </form>
 
 <div id="connect-result" style="margin-top:24px;"></div>
 
-<style>
-  form#addf .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
-  form#addf label { display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--tx-3); }
-  form#addf label.wide { grid-column:1 / -1; }
-  form#addf input, form#addf select {
-    background: var(--bg-1); color: var(--tx); border:1px solid var(--line);
-    border-radius:7px; padding:9px 11px; font-family:var(--sans); font-size:13.5px;
-    letter-spacing:normal; text-transform:none; outline:none; transition:border-color .15s;
-  }
-  form#addf input:focus, form#addf select:focus { border-color: var(--acc-line); }
-  button.askbtn, button.rmq {
-    background: transparent; color: var(--acc); border:1px solid var(--acc-line);
-    border-radius:999px; padding:6px 14px; font-family:var(--mono); font-size:10.5px;
-    letter-spacing:0.08em; cursor:pointer; transition:all .15s var(--ease);
-  }
-  button.askbtn { padding:9px 20px; }
-  button.rmq { color: var(--v-out); border-color: rgba(217,112,130,.3); padding:4px 11px; }
-  button.askbtn:hover { background: var(--acc-bg); border-color: var(--acc); }
-  button.rmq:hover { background: rgba(217,112,130,.1); }
-  @media (max-width:640px){ form#addf .grid2 { grid-template-columns:1fr; } }
-</style>
 <script>
   async function postJSON(u, b) {
     const r = await fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
     const t = await r.text(); let d; try { d = JSON.parse(t); } catch { d = {detail:t}; }
     return {ok:r.ok, status:r.status, data:d};
   }
-  function banner(kind, tag, msg) {
-    return '<div class="banner '+kind+'"><span class="tag">'+tag+'</span><div>'+msg+'</div></div>';
+  function banner(label, msg) {
+    return '<div class="banner"><div><div class="label">'+label+'</div><div class="text">'+msg+'</div></div></div>';
   }
   document.getElementById('addf').addEventListener('submit', async e => {
     e.preventDefault();
@@ -111,18 +99,47 @@
       location: document.getElementById('f-loc').value.trim(),
     };
     const el = document.getElementById('connect-result');
-    el.innerHTML = '<p style="color:var(--tx-3)">Registering &amp; dispatching…</p>';
+    el.innerHTML = '<p style="color:var(--ink-mid)">Registering &amp; dispatching…</p>';
     const {ok, data} = await postJSON('/connect/add', body);
-    if (!ok) { el.innerHTML = banner('out','Error', data.error || JSON.stringify(data)); return; }
+    if (!ok) { el.innerHTML = banner('Error', data.error || JSON.stringify(data)); return; }
     const rows = data.dispatch.focus_rows;
-    el.innerHTML = banner('native','Registered',
-      'Source <code>'+body.source_id+'</code> registered. Dispatcher produced <strong>'+rows+'</strong> FOCUS rows across '+data.sources.length+' sources. Reloading…');
+    el.innerHTML = banner('Registered',
+      'Source <code class="mono" style="color:var(--amber)">'+body.source_id+'</code> registered. Dispatcher produced <strong>'+rows+'</strong> FOCUS rows across '+data.sources.length+' sources. Reloading…');
     setTimeout(() => location.reload(), 1100);
   });
-  document.querySelectorAll('.rmq').forEach(b => b.addEventListener('click', async () => {
-    const id = b.dataset.id;
-    const {ok, data} = await postJSON('/connect/remove', {source_id:id});
-    if (ok) location.reload();
-  }));
+  function toast(msg, isErr){
+    const t = document.createElement('div');
+    t.className = 'toast' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3200);
+  }
+  // Removing a source is destructive and irreversible — confirm inline first.
+  // Delegated handler so the re-rendered Remove button stays live after Cancel.
+  document.getElementById('src-body').addEventListener('click', async (e) => {
+    const cell = e.target.closest('td');
+
+    if (e.target.classList.contains('rmq')) {
+      const id = e.target.dataset.id;
+      cell.innerHTML = '<span class="rm-confirm"><span class="q">Remove?</span>'
+        + '<button class="rm-yes" data-id="'+id+'">Confirm</button>'
+        + '<button class="rm-no" data-id="'+id+'">Cancel</button></span>';
+      return;
+    }
+    if (e.target.classList.contains('rm-no')) {
+      cell.innerHTML = '<button class="rmq" data-id="'+e.target.dataset.id+'">Remove</button>';
+      return;
+    }
+    if (e.target.classList.contains('rm-yes')) {
+      const id = e.target.dataset.id;
+      e.target.textContent = 'Removing…';
+      const {ok} = await postJSON('/connect/remove', {source_id:id});
+      if (ok) { toast('Source ' + id + ' removed.'); setTimeout(() => location.reload(), 700); }
+      else {
+        toast('Could not remove ' + id + '. Try again.', true);
+        cell.innerHTML = '<button class="rmq" data-id="'+id+'">Remove</button>';
+      }
+    }
+  });
 </script>
 {% endblock %}

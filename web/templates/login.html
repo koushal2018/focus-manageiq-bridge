@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CloudLens FinOps — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#15140F;--ink-soft:#3a362d;--paper:#F3EFE6;--cream:#E2DAC4;
+    --accent:#FF5B2E;--accent-deep:#D63E0F;--moss:#3D4E2A;--moss-light:#7A8C5A;
+    --sand:#C9B98E;--lilac:#9B8FD4;--rose:#E89B8A;
+    --border:rgba(21,20,15,0.12);--border-strong:rgba(21,20,15,0.22);
+    --serif:'Fraunces',serif;--sans:'Geist',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;overflow-x:hidden}
+  body{font-family:var(--sans);background:var(--paper);color:var(--ink);min-height:100vh;line-height:1.5;-webkit-font-smoothing:antialiased;position:relative}
+  .blob{position:fixed;border-radius:50%;filter:blur(80px);opacity:0.5;pointer-events:none;z-index:0;animation:float 18s ease-in-out infinite}
+  .blob.b1{width:520px;height:520px;background:radial-gradient(circle,#FFB89E,transparent 70%);top:-180px;left:-160px}
+  .blob.b2{width:460px;height:460px;background:radial-gradient(circle,#C7D9A8,transparent 70%);bottom:-180px;right:-140px;animation-delay:-6s}
+  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,-30px) scale(1.08)}}
+  @media (prefers-reduced-motion:reduce){.blob{animation:none}}
+  .shell{position:relative;z-index:2;min-height:100vh;display:grid;grid-template-columns:1.05fr 1fr}
+  @media (max-width:900px){.shell{grid-template-columns:1fr}}
+  .brand-panel{padding:48px 56px;display:flex;flex-direction:column;justify-content:space-between;gap:40px}
+  @media (max-width:900px){.brand-panel{padding:32px 24px 0}}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-mark{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 30% 30%,var(--accent),var(--accent-deep));box-shadow:inset -4px -4px 8px rgba(0,0,0,0.3),0 0 20px rgba(255,91,46,0.4)}
+  .logo-text strong{font-family:var(--serif);font-weight:600;font-size:20px;display:block;line-height:1}
+  .logo-text span{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;opacity:0.55;text-transform:uppercase}
+  .syn-pill{font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;background:rgba(255,91,46,0.12);color:var(--accent-deep);border:1px solid rgba(255,91,46,0.3);padding:6px 14px;border-radius:999px}
+  .hero{max-width:560px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-deep);margin-bottom:18px}
+  .hero h1{font-family:var(--serif);font-weight:400;font-size:52px;line-height:1.02;letter-spacing:-0.025em;margin-bottom:18px}
+  .hero h1 em{font-family:'Instrument Serif',serif;font-style:italic;color:var(--accent)}
+  .hero p{font-size:15px;color:var(--ink-soft);max-width:460px;line-height:1.6}
+  .stat-strip{display:flex;gap:32px;margin-top:34px;flex-wrap:wrap}
+  .stat-label{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.55}
+  .stat-value{font-family:var(--serif);font-size:26px;font-weight:500;margin-top:6px;letter-spacing:-0.02em}
+  .brand-foot{font-family:var(--mono);font-size:10.5px;opacity:0.5;display:flex;gap:18px;flex-wrap:wrap}
+  .auth-panel{display:flex;align-items:center;justify-content:center;padding:48px}
+  .auth-card{background:rgba(255,255,255,0.6);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:32px;padding:38px 40px;width:100%;max-width:420px;box-shadow:0 20px 60px -30px rgba(21,20,15,0.4)}
+  .auth-card h2{font-family:var(--serif);font-weight:500;font-size:26px;letter-spacing:-0.02em}
+  .auth-card .sub{color:var(--ink-soft);font-size:13.5px;margin-top:6px;margin-bottom:24px}
+  .notice{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:16px;padding:12px 14px;margin-bottom:22px;font-size:12px;color:var(--ink-soft);line-height:1.5;background:rgba(255,91,46,0.04)}
+  .notice strong{color:var(--ink)}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .field input{width:100%;background:#fff;border:1px solid var(--border-strong);border-radius:14px;padding:12px 14px;font-family:var(--mono);font-size:13px;color:var(--ink);outline:none}
+  .field input:focus{border-color:var(--accent)}
+  .submit{width:100%;background:var(--ink);color:var(--paper);border:none;border-radius:100px;font-family:var(--sans);font-size:13px;font-weight:500;padding:13px;cursor:pointer;margin-top:6px;transition:all 0.4s cubic-bezier(.34,1.56,.64,1);display:inline-flex;align-items:center;justify-content:center;gap:8px}
+  .submit:hover{transform:translateY(-2px);box-shadow:0 8px 20px -6px rgba(21,20,15,0.4)}
+  .divider{display:flex;align-items:center;gap:14px;margin:22px 0;color:var(--ink-soft);font-family:var(--mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;opacity:0.7}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
+  .sso{display:flex;flex-direction:column;gap:10px}
+  .sso a{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border:1px solid var(--border);border-radius:16px;text-decoration:none;color:var(--ink);font-size:13px;background:rgba(255,255,255,0.5)}
+  .sso a:hover{border-color:var(--accent);background:#fff}
+  .sso a .meta{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.5}
+  .audit{margin-top:22px;font-family:var(--mono);font-size:10px;color:var(--ink-soft);opacity:0.7;line-height:1.6;border-top:1px dashed var(--border);padding-top:14px}
+  a.focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div>
+<div class="shell">
+  <section class="brand-panel">
+    <div class="logo" style="justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:12px">
+        <span class="logo-mark" aria-hidden="true"></span>
+        <span class="logo-text"><strong>CloudLens</strong><span>FinOps · Emirates NBD</span></span>
+      </span>
+      <span class="syn-pill">Synthetic PoC</span>
+    </div>
+    <div class="hero">
+      <div class="eyebrow">Multicloud cost intelligence</div>
+      <h1>One pane.<br>Every cloud.<br><em>Every workload.</em></h1>
+      <p>A FOCUS v1.3-aligned view of AWS, Azure, OCI and on-premise spend — joined to ManageIQ utilization, honest about what the spec can and can’t answer. All figures synthetic and USD-normalised.</p>
+      <div class="stat-strip">
+        <div><div class="stat-label">Total billed</div><div class="stat-value"><span style="font-size:15px;opacity:0.6;font-family:var(--mono)">USD</span> {{ "{:,.0f}".format(kpis.total_usd) }}</div></div>
+        <div><div class="stat-label">FOCUS rows</div><div class="stat-value">{{ "{:,}".format(kpis.focus_rows) }}</div></div>
+        <div><div class="stat-label">Joined to MIQ</div><div class="stat-value">{{ kpis.pct_joined }}%</div></div>
+      </div>
+    </div>
+    <div class="brand-foot"><span>FOCUS v1.3 conformant</span><span>Synthetic data · DEMO-*</span><span>Emirates NBD · Internal PoC</span></div>
+  </section>
+
+  <section class="auth-panel">
+    <div class="auth-card">
+      <h2>Welcome back.</h2>
+      <div class="sub">Sign in to your FinOps workspace.</div>
+      <div class="notice"><strong>Demo login</strong> — no credentials are checked. Any input enters the console. The warehouse holds synthetic data marked <code style="font-family:var(--mono);color:var(--accent-deep)">DEMO-*</code>.</div>
+      <form action="/" method="get">
+        <div class="field"><label for="email">Corporate email</label><input id="email" type="email" placeholder="harsha.mylavarapu@emiratesnbd.com" value="harsha.mylavarapu@emiratesnbd.com" autocomplete="email"></div>
+        <div class="field"><label for="pwd">Passphrase</label><input id="pwd" type="password" placeholder="••••••••••••" value="demo-not-real" autocomplete="current-password"></div>
+        <button class="submit" type="submit">Enter console
+          <svg width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6 H10 M7 3 L10 6 L7 9"/></svg>
+        </button>
+      </form>
+      <div class="divider">or continue with</div>
+      <div class="sso">
+        <a href="/"><span>Emirates NBD SSO</span><span class="meta">SAML · demo</span></a>
+        <a href="/"><span>Microsoft Entra ID</span><span class="meta">demo</span></a>
+        <a href="/welcome"><span>View the overview tour</span><span class="meta">no sign-in</span></a>
+      </div>
+      <div class="audit">[scope] focus_costs:read · resource_join_map:read · miq_utilization:read · within policy<br>[note] demo authentication only — synthetic warehouse, no production data</div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

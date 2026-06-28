@@ -47,12 +47,49 @@ app.include_router(ai_router)
 app.include_router(connect_router)
 
 
+@app.get("/login", response_class=HTMLResponse)
+def login(request: Request):
+    return templates.TemplateResponse(
+        request, "login.html",
+        {"kpis": queries.headline_kpis(), "active": None},
+    )
+
+
+@app.get("/welcome", response_class=HTMLResponse)
+def welcome(request: Request):
+    return templates.TemplateResponse(
+        request, "splash.html",
+        {"kpis": queries.headline_kpis(), "active": None},
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    stats = queries.headline_stats()
     return templates.TemplateResponse(
         request, "index.html",
-        {"stats": stats, "active": "home"},
+        {
+            "kpis": queries.headline_kpis(),
+            "pipeline": queries.pipeline_snapshot(),
+            "ingest": queries.provider_ingest(),
+            "join_dist": queries.join_distribution(),
+            "rightsizing": queries.top_rightsizing(6),
+            "cvo": queries.cloud_vs_onprem_with_budget(),
+            "active": "home",
+        },
+    )
+
+
+@app.get("/workload/{vm_id}", response_class=HTMLResponse)
+def workload_detail(request: Request, vm_id: str):
+    detail = queries.workload_detail(vm_id)
+    if not detail:
+        return templates.TemplateResponse(
+            request, "view_detail_missing.html",
+            {"vm_id": vm_id, "active": "utilization"}, status_code=404,
+        )
+    return templates.TemplateResponse(
+        request, "view_detail.html",
+        {"d": detail, "vm_id": vm_id, "active": "utilization"},
     )
 
 

@@ -1,9 +1,10 @@
 """Thin Bedrock Converse-API wrapper for NL-to-SQL.
 
-Defaults to me-central-1 via the global cross-region inference profile
-because Claude is not on-demand-available in me-central-1 directly
-(SPEC §0). Switchable via BEDROCK_REGION + BEDROCK_MODEL_ID env vars
-for testing in a different region.
+Defaults to us-east-1 via the US cross-region inference profile
+(`us.anthropic.…`). me-central-1 does NOT host Claude (residency gotcha
+B-1 / G-10): a Gulf-resident bank must accept either the global inference
+profile or a commercial-region endpoint such as us-east-1 used here for
+the PoC. Switchable via BEDROCK_REGION + BEDROCK_MODEL_ID env vars.
 
 If BEDROCK_DISABLED=1 (the default for the PoC), `ask_bedrock()` raises
 immediately --- the rest of the stack is unaffected. This is the SPEC §3.6
@@ -23,15 +24,17 @@ from dataclasses import dataclass
 from ai import sql_guard
 
 
-# Defaults safe for me-central-1 customers (SPEC §0 residency gotcha):
-# data may route via the global inference profile (any commercial region).
-# Document this as G-10 below; the AI service must NOT pretend otherwise.
-DEFAULT_REGION = os.environ.get("BEDROCK_REGION", "me-central-1")
+# PoC default: us-east-1 with the US cross-region inference profile.
+# me-central-1 has no Claude on-demand (residency gotcha B-1 / G-10); the
+# AI service must NOT pretend the data stays in-region — it leaves to a US
+# commercial region here. For an in-Gulf posture, switch to the global
+# profile (global.anthropic.…) and document the routing.
+DEFAULT_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
 DEFAULT_MODEL_ID = os.environ.get(
     "BEDROCK_MODEL_ID",
-    # global. inference profile for the latest Claude family. Verify
-    # with `aws bedrock list-inference-profiles` before relying.
-    "global.anthropic.claude-sonnet-4-6",
+    # US cross-region inference profile for the latest Claude family. Verify
+    # with `aws bedrock list-inference-profiles --region us-east-1`.
+    "us.anthropic.claude-sonnet-4-6",
 )
 MAX_TOKENS = int(os.environ.get("BEDROCK_MAX_TOKENS", "1500"))
 
@@ -65,22 +68,33 @@ Schema (all tables are read-only; FOCUS v1.3 column names in snake_case):
   resource_join_map(
     row_id, status, focus_source, focus_resource_id,
     focus_service_category, focus_billed_cost_sum, focus_row_count,
-    miq_vm_id, miq_vm_name, miq_vendor, miq_uid_ems, miq_ems_ref,
+    miq_vm_id,          -- TEXT (not an integer!)
+    miq_vm_name, miq_vendor, miq_uid_ems, miq_ems_ref,
     join_key_used, notes
   )
   -- status values: matched | unmatched_focus_only | unmatched_miq_only
   --                | ambiguous | no_resource_id
 
   miq_utilization(
-    miq_vm_id, timestamp, capture_interval,
+    miq_vm_id,          -- BIGINT
+    timestamp, capture_interval,
     cpu_usage_pct, mem_usage_pct, resource_name
   )
 
   miq_onprem_cost(
-    row_id, miq_vm_id, charge_period_start, charge_period_end,
+    row_id,
+    miq_vm_id,          -- BIGINT
+    charge_period_start, charge_period_end,
     chargeback_rate_id, billed_cost, billing_currency,
     service_category, service_name, sub_account_id, notes
   )
+
+TYPE QUIRK (must handle, or the query errors):
+  resource_join_map.miq_vm_id is TEXT, but miq_utilization.miq_vm_id and
+  miq_onprem_cost.miq_vm_id are BIGINT. When joining resource_join_map to
+  either, you MUST cast: `resource_join_map.miq_vm_id::BIGINT = mu.miq_vm_id`.
+  A bare `=` across these columns fails with "operator does not exist:
+  text = bigint".
 
 Strict rules:
   1. SELECT statements ONLY. Never emit INSERT, UPDATE, DELETE, MERGE,
@@ -96,6 +110,51 @@ Strict rules:
      the schema above, respond with: SELECT 'no answer' AS result
   6. For ANY cost total/sum/average across providers, use billed_cost_usd
      (USD-normalized). Never SUM billed_cost directly — it mixes currencies.
+  7. NEVER SUM or AVG a focus_costs cost column in the same query that joins
+     to miq_utilization. There are many utilization rows per VM (e.g. 24),
+     so the join multiplies each cost row by that count and the total comes
+     out inflated (e.g. 24×) but plausible. If a question needs BOTH cost and
+     utilization per workload, pre-aggregate utilization in a subquery/CTE
+     first, e.g.:
+       WITH util AS (
+         SELECT miq_vm_id, AVG(cpu_usage_pct) AS avg_cpu
+         FROM miq_utilization GROUP BY miq_vm_id
+       )
+       SELECT j.miq_vm_name, j.focus_billed_cost_sum, util.avg_cpu
+       FROM resource_join_map j
+       JOIN util ON util.miq_vm_id = j.miq_vm_id::BIGINT
+       WHERE j.status = 'matched';
+     Note resource_join_map.focus_billed_cost_sum is the pre-summed cost per
+     workload — prefer it over re-summing focus_costs when joining to MIQ.
+  8. AI / GenAI questions: the model identity lives in `sku_meter`
+     (e.g. 'anthropic.claude-3-5-sonnet-...::InputTokens',
+     'gpt-4-turbo::OutputTokens', 'cohere.command-r-plus'), filtered by
+     `service_category = 'AI and Machine Learning'`. To compare models, strip
+     the '::InputTokens'/'::OutputTokens' suffix with split_part(sku_meter,
+     '::', 1) and GROUP BY that.
+  9. Map vague superlatives to a concrete, available metric instead of
+     refusing. There is NO token-count/usage column — only cost
+     (billed_cost_usd) and the number of billing line items (COUNT(*)).
+     So "most used / most popular / widely used / heaviest" AI model →
+     answer by SUM(billed_cost_usd) as the spend proxy, highest first.
+     Prefer answering with the best available proxy over 'no answer';
+     reserve 'no answer' for questions the schema genuinely cannot address
+     (e.g. data we do not store at all, like latency or user counts).
+ 10. WORKLOAD questions: the per-workload record is in resource_join_map, one
+     row per workload (miq_vm_name), with focus_billed_cost_sum already the
+     correct USD cost for that workload — USE IT for "cost of workload X" or
+     "workloads by cost" (do NOT re-sum focus_costs by resource_name; that
+     returns a partial slice and a different number). Join to miq_utilization
+     (cast ::BIGINT, rule 7) for CPU/mem. status='matched' = joined to
+     inventory; 'unmatched_focus_only' = cost with no MIQ VM;
+     'unmatched_miq_only' = inventory with no cost.
+ 11. BUSINESS UNIT / cost-centre / team / owner: there is no dedicated column.
+     The only signal is the JSONB `tags` column on focus_costs, e.g.
+     tags->>'cost-center' or tags->>'app'. Tagging is INCOMPLETE — many rows
+     have null tags. When asked by business unit/team, group by
+     tags->>'cost-center' (or the relevant tag key) AND return the untagged
+     remainder rather than dropping it, so the gap is visible. Do not invent
+     a business-unit mapping that isn't in the tags.
 """
 
 
@@ -118,6 +177,12 @@ class BedrockDisabled(RuntimeError):
 
 
 class BedrockGuardrailRefusal(RuntimeError):
+    pass
+
+
+class BedrockQueryExecutionError(RuntimeError):
+    """The model produced guard-valid SQL that still failed at execution
+    (e.g. a type mismatch). Surfaced as a clean message, never a raw 500."""
     pass
 
 
@@ -180,7 +245,78 @@ def ask_bedrock(question: str) -> BedrockAnswer:
     # Financial-sanity flags (H-10) — valid SQL can still be a wrong number.
     warnings = sql_guard.financial_sanity_warnings(sql)
 
-    # Execute via the read-only path
+    # Execute via the read-only path. Guard-valid SQL can still fail at
+    # execution (a type mismatch, an unknown column the guard let pass).
+    # Surface that as a clean, SQL-showing message --- never a raw 500.
     from web import db
-    rows = db.query(sql)
+    try:
+        rows = db.query(sql)
+    except Exception as e:  # psycopg2 errors, etc.
+        raise BedrockQueryExecutionError(
+            f"The generated SQL was safe but failed to run: "
+            f"{str(e).splitlines()[0]}"
+        ) from e
     return BedrockAnswer(sql=sql, rows=rows, raw_text=raw, warnings=warnings)
+
+
+# System prompt for the "FinOps assistant" narration layer. This call NEVER
+# touches the database --- it is handed the exact rows already returned and may
+# only describe/interpret THOSE. It is forbidden from introducing any figure
+# not present in the rows, which keeps the bank-safety invariant (SPEC §0:
+# no confident wrong numbers) even in the prose layer.
+NARRATE_SYSTEM_PROMPT = """\
+You are a FinOps assistant for Emirates NBD leadership. You are given a
+user's question and the EXACT rows returned by a read-only query that has
+already run. Write a brief, plain-language answer for a non-technical
+executive.
+
+HARD RULES (a violation is worse than saying less):
+  1. Use ONLY numbers that appear verbatim in the provided rows. NEVER
+     introduce, estimate, extrapolate, or compute a new figure. If a number
+     is not in the rows, do not state it.
+  2. Currency is USD and the data is SYNTHETIC (a demo). You may say "USD"
+     but never imply the figures are real ENBD spend.
+  3. 2–4 sentences maximum. Lead with the direct answer to the question.
+  4. You MAY add ONE short, clearly-labelled recommendation ("Recommendation:
+     …") ONLY when the rows themselves support it (e.g. a workload with low
+     CPU and real cost suggests rightsizing). If the rows don't obviously
+     support a recommendation, omit it entirely — do not invent one.
+  5. No markdown headers, no tables, no bullet lists. Plain sentences.
+  6. If there are zero rows, say plainly that nothing matched.
+"""
+
+
+def narrate_answer(question: str, rows: list[dict], max_rows: int = 40) -> str | None:
+    """Optional FinOps-assistant prose over rows ALREADY returned.
+
+    Returns None (never raises) if Bedrock is disabled or the call fails ---
+    the deterministic answer line always stands on its own, so the assistant
+    layer is purely additive. Does NOT query the database.
+    """
+    if os.environ.get("BEDROCK_DISABLED", "1") == "1":
+        return None
+    try:
+        import json as _json
+        import boto3
+        from botocore.config import Config
+
+        # Cap rows fed to the model — a leadership answer never needs 100.
+        sample = rows[:max_rows]
+        payload = _json.dumps({"question": question, "rows": sample}, default=str)
+
+        client = boto3.client(
+            "bedrock-runtime",
+            region_name=DEFAULT_REGION,
+            config=Config(retries={"max_attempts": 3, "mode": "adaptive"}),
+        )
+        resp = client.converse(
+            modelId=DEFAULT_MODEL_ID,
+            system=[{"text": NARRATE_SYSTEM_PROMPT}],
+            messages=[{"role": "user", "content": [{"text": payload}]}],
+            inferenceConfig={"maxTokens": 350, "temperature": 0.2},
+        )
+        text = resp["output"]["message"]["content"][0]["text"].strip()
+        return text or None
+    except Exception:
+        # Fail soft: the deterministic answer line is the source of truth.
+        return None

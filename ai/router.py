@@ -84,6 +84,9 @@ def ask(body: dict[str, Any]) -> dict:
         raise HTTPException(503, str(e))
     except bedrock_client.BedrockGuardrailRefusal as e:
         return {"sql": str(e), "rows": [], "raw_text": "(guardrail refusal)", "refused": True}
+    except bedrock_client.BedrockQueryExecutionError as e:
+        # Guard-valid SQL that failed at execution. Clean 422, not a 500.
+        raise HTTPException(422, str(e))
     except sql_guard.SqlValidationError as e:
         raise HTTPException(
             422,
@@ -97,3 +100,20 @@ def ask(body: dict[str, Any]) -> dict:
         "warnings": answer.warnings or [],   # H-10 financial-sanity flags
         "refused": False,
     }
+
+
+@router.post("/narrate")
+def narrate(body: dict[str, Any]) -> dict:
+    """FinOps-assistant prose over rows the caller ALREADY has.
+
+    Does not touch the database. The narration is bounded to the supplied
+    rows (SPEC §0 — no new numbers). Returns {narrative} or {narrative: null}
+    when Bedrock is off or the call fails (the caller's deterministic answer
+    line is the source of truth and always stands).
+    """
+    question = (body.get("question") or "").strip()
+    rows = body.get("rows")
+    if not isinstance(rows, list):
+        raise HTTPException(400, "missing 'rows' (list)")
+    text = bedrock_client.narrate_answer(question, rows)
+    return {"narrative": text}

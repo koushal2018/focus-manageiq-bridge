@@ -2,91 +2,288 @@
 {% block title %}Overview · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<div class="in">
-  <div class="page-eyebrow">FOCUS v1.3 × ManageIQ</div>
-  <h1 class="title">Four requirements, four verdicts.</h1>
-  <p class="sub">
-    Multi-cloud cost normalized to FOCUS, joined to ManageIQ inventory and
-    utilization. Each view states where its data comes from and what the
-    spec can and cannot answer.
-  </p>
-</div>
-
-<h2 class="sec in d1">Verdict ledger</h2>
-<div class="ledger in d1">
-  <a class="ledger-row" href="/views/ai" style="--row-tone: var(--v-native)">
-    <span class="idx">01</span>
-    <div>
-      <div class="name">AI cost by cloud &amp; model</div>
-      <div class="desc">Bedrock, Azure OpenAI, OCI generative-AI — per provider, per model, with token splits.</div>
+<!-- Honest banner -->
+<div class="banner" role="note">
+  <div>
+    <div class="label">Source &amp; scope</div>
+    <div class="text">
+      Data joined from <strong>FOCUS v1.3</strong> billing exports (AWS / Azure / OCI) and the on-prem
+      <strong>ManageIQ</strong> inventory + utilization warehouse. Cloud cost is native FOCUS; on-prem cost is a
+      <strong>per-resource recharge model</strong> and is labelled accordingly. All values are normalised to
+      <strong>USD</strong> (AED pegged at 3.6725). All data is <strong>synthetic</strong>; identifiers prefixed
+      <code class="mono" style="color:var(--amber)">DEMO-</code> are intentionally non-production. Verdicts below
+      describe what FOCUS <em>can</em> answer — not what we wish it could.
     </div>
-    <span class="verdict v-native"><span class="dot"></span> FOCUS native</span>
-    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
-  </a>
-  <a class="ledger-row" href="/views/utilization" style="--row-tone: var(--v-partial)">
-    <span class="idx">02</span>
-    <div>
-      <div class="name">Resource utilization &amp; cost</div>
-      <div class="desc">CPU and memory % per workload, joined to cloud cost — the rightsizing surface.</div>
-    </div>
-    <span class="verdict v-partial"><span class="dot"></span> Partial · not in FOCUS</span>
-    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
-  </a>
-  <a class="ledger-row" href="/views/cloud-vs-onprem" style="--row-tone: var(--v-conditional)">
-    <span class="idx">03</span>
-    <div>
-      <div class="name">Cloud vs on-prem cost</div>
-      <div class="desc">Cloud half FOCUS-native; on-prem half from ManageIQ's recharge model.</div>
-    </div>
-    <span class="verdict v-conditional"><span class="dot"></span> Conditional</span>
-    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
-  </a>
-  <a class="ledger-row" href="/views/carbon" style="--row-tone: var(--v-out)">
-    <span class="idx">04</span>
-    <div>
-      <div class="name">Carbon footprint</div>
-      <div class="desc">No carbon column in FOCUS through v1.4 — a roadmap to four real feeds, not a number.</div>
-    </div>
-    <span class="verdict v-out"><span class="dot"></span> Out of FOCUS</span>
-    <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 3l5 5-5 5"/></svg>
-  </a>
-</div>
-
-<h2 class="sec in d2">Pipeline snapshot</h2>
-<div class="stat-strip in d2">
-  <div class="stat">
-    <div class="k">FOCUS rows</div>
-    <div class="v">{{ stats.focus_rows }}</div>
-    <div class="meta">AWS · Azure · OCI</div>
-  </div>
-  <div class="stat">
-    <div class="k">Join map</div>
-    <div class="v">{{ stats.join_rows }}</div>
-    <div class="meta">resolved + failure modes</div>
-  </div>
-  <div class="stat">
-    <div class="k">Utilization</div>
-    <div class="v">{{ stats.util_rows }}</div>
-    <div class="meta">hourly rollups</div>
-  </div>
-  <div class="stat">
-    <div class="k">Clouds</div>
-    <div class="v">3</div>
-    <div class="meta">+ on-prem via MIQ</div>
   </div>
 </div>
 
-<h2 class="sec in d3">Join distribution</h2>
-<div class="tbl in d3" style="padding: 22px 26px;">
-{% for s in stats.join_status %}
-  {% set widest = stats.join_status|map(attribute='n')|max %}
-  {% set pct = (s.n / widest * 100) if widest else 0 %}
-  <div class="jbar">
-    <span class="nm">{{ s.status }}</span>
-    <span class="tr"><span class="fl" style="width: {{ pct }}%; animation-delay: {{ 0.2 + loop.index0 * 0.08 }}s;"></span></span>
-    <span class="ct">{{ s.n }}</span>
+<!-- Page head -->
+<div class="page-head">
+  <div>
+    <h1>Overview — leadership requirements ledger</h1>
+    <div class="tag">FOCUS v1.3 across AWS, Azure, OCI, on-prem. Verdicts before numbers.</div>
   </div>
-{% endfor %}
+  <div class="stamp">
+    <strong>Statement of position</strong><br>
+    {{ kpis.focus_rows }} FOCUS rows · {{ kpis.matched }} joined<br>
+    Reporting currency · USD
+  </div>
 </div>
+
+<hr class="rule">
+
+<!-- Coverage gauge -->
+<div class="coverage">
+  <div class="cov-label"><strong>Primary goal</strong> · FOCUS-conformant coverage</div>
+  <div class="cov-bar" aria-label="2 of 4 requirements answered"><span style="width:50%"></span></div>
+  <div class="cov-label"><strong>2&nbsp;/&nbsp;4</strong> requirements fully answered</div>
+</div>
+
+<!-- ─────────── Verdict Ledger ─────────── -->
+<div class="section-label"><span class="num">01.</span>Verdict ledger</div>
+
+<table class="ledger" role="table">
+  <thead>
+    <tr>
+      <th scope="col" class="idx">#</th>
+      <th scope="col">Requirement</th>
+      <th scope="col" class="mech-h">Mechanism / dependency</th>
+      <th scope="col" class="r">FOCUS verdict</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="clickable" data-href="/views/cloud-vs-onprem">
+      <td class="idx mono">01</td>
+      <td class="req">Unified cost across AWS, Azure, OCI, on-prem
+        <span class="domain">Domain · Cost allocation</span>
+      </td>
+      <td class="mech">FOCUS v1.3 <span class="mono" style="color:var(--ink)">BilledCost</span> across providers + on-prem recharge model. No transformation required for cloud half.</td>
+      <td class="verdict"><span class="v-word v-native"><span class="dot"></span>Native</span></td>
+    </tr>
+    <tr class="clickable" data-href="/views/utilization">
+      <td class="idx mono">02</td>
+      <td class="req">Per-workload utilization joined to cost
+        <span class="domain">Domain · Efficiency</span>
+      </td>
+      <td class="mech">Requires ManageIQ join on <span class="mono" style="color:var(--ink)">ResourceId</span>. Keys are asymmetric across providers; residual rows are surfaced, not dropped.</td>
+      <td class="verdict"><span class="v-word v-partial"><span class="dot"></span>Partial</span></td>
+    </tr>
+    <tr class="clickable" data-href="/views/ai">
+      <td class="idx mono">03</td>
+      <td class="req">AI / GenAI spend broken down by model and token type
+        <span class="domain">Domain · AI cost</span>
+      </td>
+      <td class="mech">Conditional on provider tag fidelity. Bedrock + Azure OpenAI tag well; OCI Gen-AI tags are inconsistent and require regex backfill.</td>
+      <td class="verdict"><span class="v-word v-cond"><span class="dot"></span>Conditional</span></td>
+    </tr>
+    <tr class="clickable" data-href="/views/carbon">
+      <td class="idx mono">04</td>
+      <td class="req">Scope 2 carbon emissions per workload
+        <span class="domain">Domain · Sustainability</span>
+      </td>
+      <td class="mech">No FOCUS column for emissions. Per-provider feeds are subscription-level (Azure), monthly (AWS CCFT), or absent (OCI). Roadmap, not a number.</td>
+      <td class="verdict"><span class="v-word v-out"><span class="dot"></span>Out of FOCUS</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ─────────── KPI strip ─────────── -->
+<div class="section-label"><span class="num">02.</span>Position · evaluation window</div>
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="k">Total billed · all providers</div>
+    <div class="v"><span class="unit">USD</span>{{ "{:,.2f}".format(kpis.total_usd) }}</div>
+    <div class="sub">FOCUS BilledCost + on-prem recharge</div>
+  </div>
+  <div class="kpi">
+    <div class="k">FOCUS rows ingested</div>
+    <div class="v">{{ "{:,}".format(kpis.focus_rows) }}</div>
+    <div class="sub">Normalised provider-native → FOCUS v1.3</div>
+  </div>
+  <div class="kpi">
+    <div class="k">Joined to ManageIQ inventory</div>
+    <div class="v">{{ kpis.pct_joined }}<span class="unit" style="margin-left:2px">%</span></div>
+    <div class="sub">{{ kpis.matched }} matched · see join distribution</div>
+  </div>
+  <div class="kpi">
+    <div class="k">Rightsizing candidates flagged</div>
+    <div class="v">{{ kpis.rightsize_count }} <span class="unit" style="margin-left:4px">VMs</span></div>
+    <div class="sub">USD&nbsp;{{ "{:,.0f}".format(kpis.rightsize_addressable) }} addressable</div>
+  </div>
+</div>
+
+<!-- ─────────── Pipeline + Join ─────────── -->
+<div class="section-label"><span class="num">03.</span>Pipeline snapshot &amp; join distribution</div>
+
+<div class="two-col">
+
+  <!-- Left: pipeline -->
+  <div>
+    <table class="data" style="margin-bottom: 0;">
+      <thead>
+        <tr>
+          <th scope="col">Source table</th>
+          <th scope="col" class="r">Rows</th>
+          <th scope="col" class="r">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pipeline %}
+        <tr>
+          <td class="mono">{{ p.table }}</td>
+          <td class="r mono">{{ "{:,}".format(p.rows) }}</td>
+          <td class="r mono"><span class="v-word {{ p.cls }}" style="font-size:11px"><span class="dot"></span>{{ p.status }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Ingestion bars -->
+    <div class="ingest">
+      <div class="header">
+        <div class="title">FOCUS rows by provider</div>
+        <div class="total"><span>Σ</span> {{ "{:,}".format(kpis.focus_rows) }} rows</div>
+      </div>
+      <div class="bars">
+        {% set maxc = ingest|map(attribute='rows')|max %}
+        {% for b in ingest %}
+        <div class="bar-wrap">
+          <div class="bar-val">{{ b.rows }}</div>
+          <div class="bar-col" style="height: {{ (b.rows / maxc * 100)|round(0, 'floor') }}%"></div>
+          <div class="bar-lbl">{{ b.label }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: join distribution -->
+  <div>
+    <div style="font-family: var(--mono); font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">
+      Join status · FOCUS ↔ ManageIQ
+    </div>
+    <div style="font-size: 12.5px; color: var(--ink-mid); line-height: 1.55; margin-bottom: 6px;">
+      Cost-to-inventory join over the ingested FOCUS rows. Residual rows are visible, not silently dropped.
+    </div>
+
+    <div class="join-bar" aria-label="Join distribution">
+      {% for j in join_dist %}<span class="{{ j.seg }}" style="width: {{ j.pct }}%"></span>{% endfor %}
+    </div>
+
+    <div class="join-legend">
+      {% for j in join_dist %}
+      <div class="row">
+        <span class="swatch {{ j.seg }}"></span>
+        <span class="lbl">{{ j.label }}</span>
+        <span class="pct">{{ j.pct }}%</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <hr class="rule-strong">
+
+    <!-- Top rightsizing preview -->
+    <div style="font-family: var(--mono); font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px;">
+      Top rightsizing candidates · click to drill down
+    </div>
+    <table class="data">
+      <thead>
+        <tr>
+          <th scope="col">Workload</th>
+          <th scope="col" class="r">CPU%</th>
+          <th scope="col" class="r">Mem%</th>
+          <th scope="col" class="r">USD</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rightsizing %}
+        <tr class="clickable" data-href="/workload/{{ r.miq_vm_id }}">
+          <td class="mono" style="font-size:11.5px">{{ r.miq_vm_name }}</td>
+          <td class="r mono"{% if r.cpu < 25 %} style="color:var(--amber)"{% endif %}>{{ r.cpu }}</td>
+          <td class="r mono dim">{{ r.mem }}</td>
+          <td class="r mono">{{ "{:,.2f}".format(r.cost) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ─────────── Cloud vs on-prem ─────────── -->
+<div class="section-label"><span class="num">04.</span>Cloud vs on-prem · position vs illustrative budget</div>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th scope="col">Provider</th>
+      <th scope="col">Source</th>
+      <th scope="col" class="r">Billed (USD)</th>
+      <th scope="col" class="r">Target *</th>
+      <th scope="col" class="r">Variance</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in cvo.rows %}
+    <tr>
+      <td>{{ r.provider }}</td>
+      <td class="dim mono" style="font-size:11.5px">{{ r.source }}</td>
+      <td class="r mono">{{ "{:,.2f}".format(r.billed) }}</td>
+      <td class="r mono dim">{{ "{:,.2f}".format(r.target) }}</td>
+      <td class="r mono" style="color:{{ 'var(--amber)' if r.variance > 0 else 'var(--jade)' }}">{{ '+' if r.variance > 0 else '' }}{{ r.variance }}%</td>
+    </tr>
+    {% endfor %}
+    <tr style="border-top: 1.5px solid var(--rule-strong);">
+      <td style="font-weight: 600;">Total</td>
+      <td class="dim mono" style="font-size:11.5px">Mixed · see source column</td>
+      <td class="r mono" style="font-weight: 600;">{{ "{:,.2f}".format(cvo.total_billed) }}</td>
+      <td class="r mono dim">{{ "{:,.2f}".format(cvo.total_target) }}</td>
+      <td class="r mono" style="color:{{ 'var(--amber)' if cvo.total_variance > 0 else 'var(--jade)' }}">{{ '+' if cvo.total_variance > 0 else '' }}{{ cvo.total_variance }}%</td>
+    </tr>
+  </tbody>
+</table>
+<div style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); margin-top: 10px;">
+  * Targets are <span style="color:var(--amber)">illustrative synthetic budgets</span> for layout demonstration — not real ENBD figures.
+</div>
+
+<!-- ─────────── Carbon roadmap ─────────── -->
+<div class="section-label"><span class="num">05.</span>Carbon · data-stream status (roadmap, not a number)</div>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th scope="col">Stream</th>
+      <th scope="col">Cadence</th>
+      <th scope="col">Granularity</th>
+      <th scope="col" class="r">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>AWS Customer Carbon Footprint Tool</td>
+      <td class="dim mono" style="font-size:11.5px">Monthly</td>
+      <td class="dim">Account-level · no per-resource</td>
+      <td class="r"><span class="v-word v-partial" style="font-size:11px"><span class="dot"></span>Available</span></td>
+    </tr>
+    <tr>
+      <td>Azure Emissions Impact Dashboard</td>
+      <td class="dim mono" style="font-size:11.5px">Monthly</td>
+      <td class="dim">Subscription-level</td>
+      <td class="r"><span class="v-word v-partial" style="font-size:11px"><span class="dot"></span>Available</span></td>
+    </tr>
+    <tr>
+      <td>OCI emissions</td>
+      <td class="dim mono" style="font-size:11.5px">—</td>
+      <td class="dim">No public feed · placeholder disabled</td>
+      <td class="r"><span class="v-word v-out" style="font-size:11px"><span class="dot"></span>Absent</span></td>
+    </tr>
+    <tr>
+      <td>On-prem · ManageIQ + PUE model</td>
+      <td class="dim mono" style="font-size:11.5px">Daily</td>
+      <td class="dim">Per-resource · <em style="color:var(--amber)">synthetic estimate</em></td>
+      <td class="r"><span class="v-word v-cond" style="font-size:11px"><span class="dot"></span>Modelled</span></td>
+    </tr>
+  </tbody>
+</table>
 
 {% endblock %}

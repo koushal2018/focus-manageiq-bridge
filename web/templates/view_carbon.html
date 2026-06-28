@@ -2,65 +2,64 @@
 {% block title %}Carbon · ENBD FinOps Console{% endblock %}
 {% block content %}
 
-<div class="in">
-  <div class="page-eyebrow"><span class="req">REQ 04</span> · Sustainability</div>
-  <h1 class="title">Carbon, honestly absent.</h1>
-  <p class="sub">
-    FOCUS through v1.4 has no carbon, emissions, or energy column. This
-    view is a roadmap to four real data streams — not a number we made up.
-  </p>
-</div>
-
-<div class="banner out in d1">
-  <span class="tag">Out of FOCUS</span>
+<div class="banner" role="note">
   <div>
-    A carbon number derived from cost alone would be confidently wrong —
-    the failure mode SPEC §0 warns against. Keep carbon data <em>next to</em>
-    the FOCUS table, joined at the view layer, and state the data quality
-    of each stream up front.
+    <div class="label">Requirement #04 · Out of FOCUS</div>
+    <div class="text">
+      FOCUS through v1.4 has no carbon, emissions, or energy column. A carbon number derived from cost alone would be
+      <strong>confidently wrong</strong> — the failure mode SPEC §0 warns against. This view is a <strong>roadmap to four
+      real data streams</strong>, not a number we made up. Keep carbon data <em>next to</em> the FOCUS table, joined at the
+      view layer, and state the data quality of each stream up front.
+    </div>
   </div>
 </div>
 
-<h2 class="sec in d1">Per-provider feeds (roadmap)</h2>
-<div class="tbl in d2">
-<table>
-  <thead><tr><th>Provider</th><th>Feed</th><th>Status</th></tr></thead>
+<div class="page-head">
+  <div>
+    <h1>Carbon, honestly absent</h1>
+    <div class="tag">No FOCUS column for emissions — a roadmap to four real feeds, not a fabricated figure.</div>
+  </div>
+  <div class="stamp"><strong>Roadmap</strong><br>not a number<br>4 feeds tracked</div>
+</div>
+
+<hr class="rule">
+
+<div class="section-label"><span class="num">01.</span>Per-provider feeds (roadmap)</div>
+<table class="data">
+  <thead><tr><th scope="col">Provider</th><th scope="col">Feed</th><th scope="col" class="r">Status</th></tr></thead>
   <tbody>
   {% for f in feeds %}
     <tr>
-      <td class="name">{{ f.provider }}</td>
-      <td>{{ f.feed }}</td>
-      <td class="muted">{{ f.status }}</td>
+      <td>{{ f.provider }}</td>
+      <td class="dim">{{ f.feed }}</td>
+      <td class="r dim mono" style="font-size:11.5px">{{ f.status }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-</div>
 
-<h2 class="sec in d3">Layout placeholder — <span style="color:var(--v-out)">do not trust these numbers</span></h2>
-<div class="banner partial in d3">
-  <span class="tag">Fake</span>
+<div class="section-label"><span class="num">02.</span>Layout placeholder <span style="color:var(--amber); font-size:10px; margin-left:8px;">● DO NOT TRUST THESE NUMBERS</span></div>
+<div class="banner partial" role="note">
   <div>
-    The carbon column below is a hand-rolled ratio applied to cost,
-    present only so the layout is real. Real carbon needs real feeds:
-    <a class="link" href="https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/ccft-overview.html">AWS CCFT</a>,
-    the Azure Emissions Impact Dashboard, and a custom on-prem model.
+    <div class="label">Fake</div>
+    <div class="text">
+      The carbon column below is a hand-rolled ratio applied to cost, present only so the layout is real. Real carbon
+      needs real feeds: AWS CCFT, the Azure Emissions Impact Dashboard, and a custom on-prem model.
+    </div>
   </div>
 </div>
-<div class="tbl in d3">
-<table>
-  <thead><tr><th>Provider</th><th class="num">Cost</th><th>Ccy</th><th class="num">Fake CO₂e (t)</th></tr></thead>
+<table class="data">
+  <thead><tr><th scope="col">Provider</th><th scope="col" class="r">Cost</th><th scope="col" class="r">Ccy</th><th scope="col" class="r">Fake CO₂e (t)</th></tr></thead>
   <tbody>
   {% for r in placeholder %}
     <tr>
-      <td class="name">{{ r.service_provider_name }}</td>
-      <td class="num">{{ '%.2f'|format(r.total_cost|float) }}</td>
-      <td class="muted">{{ r.currency }}</td>
-      <td class="num muted">{{ r.fake_co2e_tonnes }}</td>
+      <td>{{ r.service_provider_name }}</td>
+      <td class="r mono">{{ "{:,.2f}".format(r.total_cost|float) }}</td>
+      <td class="r mono dim">{{ r.currency }}</td>
+      <td class="r mono dim">{{ r.fake_co2e_tonnes }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-</div>
 
 {% endblock %}

@@ -1,0 +1,169 @@
+{% extends "_base.html" %}
+{% block title %}{{ d.head.miq_vm_name }} · Workload detail{% endblock %}
+{% block extra_css %}
+  .crumb { font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); letter-spacing: 0.02em; margin-bottom: 22px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .crumb a { color: var(--ink-mid); text-decoration: none; } .crumb a:hover { color: var(--ink); }
+  .crumb .sep { color: var(--ink-faint); } .crumb .current { color: var(--ink); }
+  .identity { display: grid; grid-template-columns: 1.4fr 1fr; border: 1px solid var(--rule-strong); margin-top: 8px; }
+  .identity .left, .identity .right { padding: 22px 24px; }
+  .identity .left { border-right: 1px solid var(--rule-strong); }
+  .ident-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 28px; }
+  .ident-grid .k { font-family: var(--mono); font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 5px; }
+  .ident-grid .v { font-family: var(--mono); font-size: 13px; color: var(--ink); line-height: 1.4; word-break: break-all; }
+  .ident-grid .v.sans { font-family: var(--sans); font-size: 14px; }
+  .vp-label { font-family: var(--mono); font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 12px; }
+  .verdict-line { display: flex; align-items: baseline; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--rule); font-size: 12.5px; }
+  .verdict-line:last-child { border-bottom: none; }
+  .verdict-line .l { color: var(--ink-mid); }
+  .verdict-line .r { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+  .decomp-bar { display: flex; height: 22px; border: 1px solid var(--rule-strong); margin: 10px 0 14px; font-family: var(--mono); font-size: 10px; }
+  .decomp-bar span { display: grid; place-items: center; color: var(--bg); font-weight: 600; border-right: 1px solid var(--bg); overflow: hidden; white-space: nowrap; }
+  .decomp-bar span:last-child { border-right: none; }
+  .dc-1 { background: #e6e8ec; } .dc-2 { background: #9aa0ac; } .dc-3 { background: #5e6470; color: var(--ink) !important; } .dc-4 { background: #3a3f4a; color: var(--ink) !important; }
+  .daily-bars { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; align-items: end; height: 120px; border-bottom: 1px solid var(--rule); padding-bottom: 1px; }
+  .daily-bars .col { width: 100%; background: var(--ink); opacity: 0.55; min-height: 1px; }
+  .daily-bars .col.peak { background: var(--amber); opacity: 1; }
+  .daily-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--ink-dim); margin-top: 6px; }
+  .daily-peak { font-family: var(--mono); font-size: 10.5px; color: var(--ink-mid); margin-bottom: 10px; }
+  .daily-peak strong { color: var(--amber); font-weight: 500; }
+{% endblock %}
+{% block content %}
+
+<nav class="crumb" aria-label="Breadcrumb">
+  <a href="/">Overview</a><span class="sep">›</span>
+  <a href="/views/utilization">Utilization × cost</a><span class="sep">›</span>
+  <span class="current mono">{{ d.head.miq_vm_name }}</span>
+</nav>
+
+{% set matched = d.head.status == 'matched' %}
+<div class="banner" role="note">
+  <div>
+    <div class="label">Source &amp; verdict · Requirement #02 · {{ 'Matched' if matched else d.head.status }}</div>
+    <div class="text">
+      Cost sourced from <strong>FOCUS v1.3 BilledCost</strong>{% if d.head.focus_source %} (<strong>{{ d.head.focus_source|upper }}</strong> export){% endif %}, normalised to <strong>USD</strong>.
+      Utilization sourced from <strong>ManageIQ</strong> daily averages joined on
+      <code class="mono" style="color:var(--amber)">{{ d.head.join_key_used or 'ResourceId' }}</code>.
+      {% if matched %}Match is <strong>clean</strong> for this workload.{% else %}This workload is <strong>{{ d.head.status }}</strong> — surfaced rather than dropped.{% endif %}
+      Any rightsizing signal is a <strong>heuristic</strong> from observed utilization; it is not an automated action.
+      Identifiers prefixed <code class="mono" style="color:var(--amber)">DEMO-</code> are synthetic.
+    </div>
+  </div>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1 style="font-family:var(--mono);font-weight:500;font-size:24px;">{{ d.head.miq_vm_name }}</h1>
+    <div class="tag">{{ d.head.miq_vendor|capitalize }} · ManageIQ vm_id {{ d.head.miq_vm_id }} · utilization vs billed cost</div>
+  </div>
+  <div class="stamp">
+    <strong>Position</strong><br>
+    {{ d.util.samples or 0 }} util samples<br>
+    {{ d.daily|length }} cost-days
+  </div>
+</div>
+
+<hr class="rule">
+
+<!-- Identity + verdict -->
+<div class="section-label"><span class="num">01.</span>Resource identity &amp; FOCUS join</div>
+<div class="identity">
+  <div class="left">
+    <div class="ident-grid">
+      <div class="field"><div class="k">FOCUS · ResourceId</div><div class="v">{{ d.head.focus_resource_id or '— no cost row —' }}</div></div>
+      <div class="field"><div class="k">ManageIQ · vm_id</div><div class="v">{{ d.head.miq_vm_id }}</div></div>
+      <div class="field"><div class="k">Provider · vendor</div><div class="v sans">{{ d.head.focus_source|upper if d.head.focus_source else '—' }} · {{ d.head.miq_vendor }}</div></div>
+      <div class="field"><div class="k">Join key used</div><div class="v">{{ d.head.join_key_used or '—' }}</div></div>
+      <div class="field"><div class="k">MIQ · uid_ems</div><div class="v">{{ d.head.miq_uid_ems or '—' }}</div></div>
+      <div class="field"><div class="k">MIQ · ems_ref</div><div class="v">{{ d.head.miq_ems_ref or '—' }}</div></div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="vp-label">Verdict line items</div>
+    <div class="verdict-line"><span class="l">FOCUS ↔ ManageIQ join</span><span class="r">
+      {% if matched %}<span class="v-word v-native"><span class="dot"></span>Matched</span>{% else %}<span class="v-word v-partial"><span class="dot"></span>{{ d.head.status }}</span>{% endif %}</span></div>
+    <div class="verdict-line"><span class="l">Cost basis</span><span class="r">
+      {% if d.head.focus_source %}<span class="v-word v-native"><span class="dot"></span>Native</span>{% else %}<span class="v-word v-out"><span class="dot"></span>None</span>{% endif %}</span></div>
+    <div class="verdict-line"><span class="l">Utilization fidelity</span><span class="r">
+      {% if d.util.samples %}<span class="v-word v-native"><span class="dot"></span>Complete</span>{% else %}<span class="v-word v-out"><span class="dot"></span>Absent</span>{% endif %}</span></div>
+    <div class="verdict-line"><span class="l">Rightsizing signal</span><span class="r">
+      {% if d.util.avg_cpu is not none and d.util.avg_cpu < 25 %}<span class="v-word v-flag"><span class="dot"></span>Underutilised</span>{% else %}<span class="v-word v-native"><span class="dot"></span>Right-sized</span>{% endif %}</span></div>
+    <div class="verdict-line"><span class="l">Carbon attribution</span><span class="r"><span class="v-word v-out"><span class="dot"></span>Out of FOCUS</span></span></div>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="section-label"><span class="num">02.</span>Position</div>
+<div class="kpis">
+  <div class="kpi">
+    <div class="k">Billed · FOCUS BilledCost</div>
+    <div class="v"><span class="unit">USD</span>{{ "{:,.2f}".format(d.head.cost) }}</div>
+    <div class="sub">{{ d.daily|length }}-day window</div>
+  </div>
+  <div class="kpi">
+    <div class="k">Avg CPU utilization</div>
+    <div class="v">{{ d.util.avg_cpu if d.util.avg_cpu is not none else '—' }}<span class="unit" style="margin-left:2px">%</span></div>
+    <div class="sub{% if d.util.avg_cpu is not none and d.util.avg_cpu < 25 %} amber{% endif %}">max {{ d.util.max_cpu if d.util.max_cpu is not none else '—' }}%</div>
+  </div>
+  <div class="kpi">
+    <div class="k">Avg Memory utilization</div>
+    <div class="v">{{ d.util.avg_mem if d.util.avg_mem is not none else '—' }}<span class="unit" style="margin-left:2px">%</span></div>
+    <div class="sub">max {{ d.util.max_mem if d.util.max_mem is not none else '—' }}%</div>
+  </div>
+  <div class="kpi">
+    <div class="k">Rightsizing signal</div>
+    {% if d.util.avg_cpu is not none and d.util.avg_cpu < 25 %}
+    <div class="v" style="color:var(--amber)">Candidate</div>
+    <div class="sub amber">CPU &lt; 25% sustained</div>
+    {% else %}
+    <div class="v" style="color:var(--jade)">None</div>
+    <div class="sub jade">utilization within band</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Daily cost + decomposition -->
+<div class="two-col">
+  <div>
+    <div class="section-label"><span class="num">03.</span>Daily billed cost (USD)</div>
+    {% if d.daily %}
+    {% set maxu = d.daily|map(attribute='usd')|map('float')|max %}
+    {% set avgu = (d.daily|map(attribute='usd')|map('float')|sum) / (d.daily|length) %}
+    <div class="daily-peak">Peak day <strong>USD {{ "%.2f"|format(maxu) }}</strong> · daily mean USD {{ "%.2f"|format(avgu) }} over {{ d.daily|length }} days</div>
+    <div class="daily-bars">
+      {% for r in d.daily %}<span class="col{{ ' peak' if r.usd|float == maxu else '' }}" style="height: {{ (r.usd|float / maxu * 100)|round(0,'floor') if maxu else 0 }}%" title="{{ r.day }} · ${{ '%.2f'|format(r.usd|float) }}"></span>{% endfor %}
+    </div>
+    <div class="daily-axis"><span>{{ d.daily[0].day }}</span><span>{{ d.daily[-1].day }}</span></div>
+    {% else %}
+    <div style="font-family:var(--mono);font-size:12px;color:var(--ink-dim);padding:20px 0;">No FOCUS cost rows for this resource.</div>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="section-label"><span class="num">04.</span>Cost decomposition · by service</div>
+    {% if d.decomp %}
+    {% set total = d.decomp|map(attribute='usd')|map('float')|sum %}
+    <div class="decomp-bar">
+      {% for r in d.decomp %}<span class="dc-{{ loop.index if loop.index <= 4 else 4 }}" style="width: {{ (r.usd|float / total * 100)|round(1) if total else 0 }}%">{{ (r.usd|float / total * 100)|round(0,'floor') if total else 0 }}%</span>{% endfor %}
+    </div>
+    <table class="data">
+      <thead><tr><th scope="col">Service</th><th scope="col" class="r">USD</th><th scope="col" class="r">Share</th></tr></thead>
+      <tbody>
+        {% for r in d.decomp %}
+        <tr>
+          <td class="dim">{{ r.service_name }}</td>
+          <td class="r mono">{{ "{:,.2f}".format(r.usd|float) }}</td>
+          <td class="r mono dim">{{ (r.usd|float / total * 100)|round(1) if total else 0 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="font-family:var(--mono);font-size:12px;color:var(--ink-dim);padding:20px 0;">No cost rows to decompose.</div>
+    {% endif %}
+    <div class="actions" style="display:flex;gap:8px;margin-top:18px;">
+      <a class="btn" href="/views/utilization">← Back to utilization × cost</a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

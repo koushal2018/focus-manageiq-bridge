@@ -118,6 +118,11 @@ def build(
     # H-7 — never float for currency). We keep the ORIGINAL rid for display
     # and compute a canonical key for matching (H-3).
     from decimal import Decimal, InvalidOperation
+    # H-1 also applies HERE: BilledCost is in the row's own currency (AED for
+    # Azure), so summing it raw inflates Azure workloads 3.6725× and produces a
+    # per-workload cost that disagrees with focus_costs.billed_cost_usd in the
+    # views (gotcha B-7). Convert to USD with the same FX map the loader uses.
+    from generators.common import FX_TO_USD
     grouped: dict[tuple[str, str], dict] = defaultdict(
         lambda: {"rows": 0, "cost": Decimal("0"), "categories": set()}
     )
@@ -125,8 +130,10 @@ def build(
         source = r.get("_source", "")
         rid = r.get("ResourceId", "")
         key = (source, rid)
+        ccy = (r.get("BillingCurrency") or "").upper()
+        rate = FX_TO_USD.get(ccy, 1.0)  # unknown ccy → treat as already-USD
         try:
-            cost = Decimal(str(r.get("BilledCost", "") or "0"))
+            cost = Decimal(str(r.get("BilledCost", "") or "0")) * Decimal(str(rate))
         except (InvalidOperation, ValueError):
             cost = Decimal("0")
         grouped[key]["rows"] += 1

@@ -39,7 +39,8 @@ def ai_cost_by_model() -> list[dict]:
 # rows, then group by VM.
 def utilization_x_cost() -> list[dict]:
     sql = """
-        SELECT  j.miq_vm_name,
+        SELECT  j.miq_vm_id,
+                j.miq_vm_name,
                 j.miq_vendor,
                 j.focus_source,
                 j.focus_billed_cost_sum::NUMERIC(12,2) AS cost,
@@ -51,7 +52,7 @@ def utilization_x_cost() -> list[dict]:
                ON  u.miq_vm_id  = j.miq_vm_id::BIGINT
               AND j.status = 'matched'
         WHERE   j.status = 'matched'
-        GROUP BY j.miq_vm_name, j.miq_vendor, j.focus_source, j.focus_billed_cost_sum
+        GROUP BY j.miq_vm_id, j.miq_vm_name, j.miq_vendor, j.focus_source, j.focus_billed_cost_sum
         ORDER BY j.focus_billed_cost_sum DESC
     """
     return db.query(sql)
@@ -182,3 +183,167 @@ def headline_stats() -> dict:
         "SELECT status, COUNT(*) AS n FROM resource_join_map GROUP BY status ORDER BY status"
     )
     return out
+
+
+# =====================================================================
+# Reference-console dashboard queries (designed UI, real data)
+# =====================================================================
+
+def headline_kpis() -> dict:
+    """The 4 KPI tiles: total billed (USD), focus rows, % joined, rightsizing."""
+    total = db.query("SELECT COALESCE(SUM(billed_cost_usd),0) AS t FROM focus_costs")[0]["t"]
+    onprem = db.query("SELECT COALESCE(SUM(billed_cost),0) AS t FROM miq_onprem_cost")[0]["t"]
+    focus_rows = db.query("SELECT COUNT(*) AS n FROM focus_costs")[0]["n"]
+    status = {r["status"]: r["n"] for r in db.query(
+        "SELECT status, COUNT(*) AS n FROM resource_join_map GROUP BY status")}
+    matched = status.get("matched", 0)
+    total_join = sum(status.values()) or 1
+    pct_joined = round(100.0 * matched / total_join, 1)
+    # rightsizing candidates: matched workloads with avg CPU < 25 and real cost
+    rightsize = db.query("""
+        SELECT COUNT(*) AS n FROM (
+          SELECT j.miq_vm_id
+          FROM resource_join_map j JOIN miq_utilization u ON u.miq_vm_id = j.miq_vm_id::BIGINT
+          WHERE j.status='matched'
+          GROUP BY j.miq_vm_id, j.focus_billed_cost_sum
+          HAVING AVG(u.cpu_usage_pct) < 25 AND j.focus_billed_cost_sum > 30
+        ) q""")[0]["n"]
+    addressable = db.query("""
+        SELECT COALESCE(SUM(j.focus_billed_cost_sum),0) AS t FROM (
+          SELECT j2.miq_vm_id, MAX(j2.focus_billed_cost_sum) focus_billed_cost_sum
+          FROM resource_join_map j2 JOIN miq_utilization u ON u.miq_vm_id=j2.miq_vm_id::BIGINT
+          WHERE j2.status='matched'
+          GROUP BY j2.miq_vm_id HAVING AVG(u.cpu_usage_pct) < 25 AND MAX(j2.focus_billed_cost_sum) > 30
+        ) j""")[0]["t"]
+    return {
+        "total_usd": float(total or 0) + float(onprem or 0),
+        "cloud_usd": float(total or 0),
+        "onprem_usd": float(onprem or 0),
+        "focus_rows": focus_rows,
+        "pct_joined": pct_joined,
+        "matched": matched,
+        "rightsize_count": rightsize,
+        "rightsize_addressable": float(addressable or 0),
+        "requirements_answered": 2,  # native + (utilization partial counts as answered-with-caveat)
+    }
+
+
+def pipeline_snapshot() -> list[dict]:
+    """Row counts per source table — the 'pipeline snapshot' panel."""
+    def n(t): return db.query(f"SELECT COUNT(*) AS n FROM {t}")[0]["n"]
+    return [
+        {"table": "focus_costs",       "rows": n("focus_costs"),       "status": "OK",    "cls": "v-native"},
+        {"table": "resource_join_map", "rows": n("resource_join_map"), "status": "OK",    "cls": "v-native"},
+        {"table": "miq_utilization",   "rows": n("miq_utilization"),   "status": "OK",    "cls": "v-native"},
+        {"table": "miq_onprem_cost",   "rows": n("miq_onprem_cost"),   "status": "Model", "cls": "v-partial"},
+    ]
+
+
+def provider_ingest() -> list[dict]:
+    """FOCUS row counts per source — the ingestion bar chart."""
+    rows = db.query("""
+        SELECT source AS label, COUNT(*) AS rows
+        FROM focus_costs GROUP BY source ORDER BY rows DESC""")
+    return [{"label": (r["label"] or "?").upper(), "rows": r["rows"]} for r in rows]
+
+
+def join_distribution() -> list[dict]:
+    """Join status with percentages, mapped to the reference's 4 segments."""
+    rows = db.query("SELECT status, COUNT(*) AS n FROM resource_join_map GROUP BY status")
+    total = sum(r["n"] for r in rows) or 1
+    label = {
+        "matched": ("Matched · FOCUS ↔ ManageIQ", "seg-1"),
+        "unmatched_focus_only": ("FOCUS-only · no inventory record", "seg-2"),
+        "unmatched_miq_only": ("Inventory-only · no cost row", "seg-3"),
+        "no_resource_id": ("No resource id · tax/refund/support", "seg-4"),
+        "ambiguous": ("Ambiguous · key collision", "seg-4"),
+    }
+    order = ["matched", "unmatched_focus_only", "unmatched_miq_only", "no_resource_id", "ambiguous"]
+    by = {r["status"]: r["n"] for r in rows}
+    out = []
+    for s in order:
+        if by.get(s):
+            lbl, seg = label[s]
+            out.append({"status": s, "label": lbl, "seg": seg,
+                        "n": by[s], "pct": round(100.0 * by[s] / total, 1)})
+    return out
+
+
+def top_rightsizing(limit: int = 6) -> list[dict]:
+    """Workloads with low CPU and real cost — the rightsizing candidates."""
+    return db.query("""
+        SELECT j.miq_vm_id, j.miq_vm_name, j.focus_source,
+               j.focus_billed_cost_sum::NUMERIC(12,2) AS cost,
+               ROUND(AVG(u.cpu_usage_pct)::NUMERIC,1) AS cpu,
+               ROUND(AVG(u.mem_usage_pct)::NUMERIC,1) AS mem
+        FROM resource_join_map j JOIN miq_utilization u ON u.miq_vm_id = j.miq_vm_id::BIGINT
+        WHERE j.status='matched'
+        GROUP BY j.miq_vm_id, j.miq_vm_name, j.focus_source, j.focus_billed_cost_sum
+        ORDER BY (CASE WHEN AVG(u.cpu_usage_pct) < 25 THEN 0 ELSE 1 END),
+                 j.focus_billed_cost_sum DESC
+        LIMIT %(n)s
+    """, {"n": limit})
+
+
+# Synthetic, illustrative monthly budget targets per provider (USD). Clearly
+# labelled in the UI as illustrative — not a real ENBD budget.
+_BUDGET_USD = {"AWS": 1200.0, "Microsoft": 780.0,
+               "Oracle Cloud Infrastructure": 760.0, "__onprem__": 4000.0}
+
+
+def cloud_vs_onprem_with_budget() -> dict:
+    """Per-provider billed (USD) vs an illustrative budget + variance."""
+    rows = db.query("""
+        SELECT service_provider_name AS provider,
+               SUM(billed_cost_usd)::NUMERIC(12,2) AS billed
+        FROM focus_costs GROUP BY service_provider_name ORDER BY billed DESC""")
+    out = []
+    total_billed = 0.0
+    total_target = 0.0
+    for r in rows:
+        billed = float(r["billed"] or 0)
+        target = _BUDGET_USD.get(r["provider"], billed)
+        var = round(100.0 * (billed - target) / target, 2) if target else 0.0
+        total_billed += billed; total_target += target
+        out.append({"provider": r["provider"], "source": "FOCUS · BilledCost (USD)",
+                    "billed": billed, "target": target, "variance": var})
+    onprem = float(db.query("SELECT COALESCE(SUM(billed_cost),0) AS t FROM miq_onprem_cost")[0]["t"] or 0)
+    otgt = _BUDGET_USD["__onprem__"]
+    total_billed += onprem; total_target += otgt
+    out.append({"provider": "On-prem", "source": "Recharge · vCPU+GB model (USD)",
+                "billed": onprem, "target": otgt,
+                "variance": round(100.0*(onprem-otgt)/otgt, 2) if otgt else 0.0})
+    return {"rows": out, "total_billed": round(total_billed, 2),
+            "total_target": round(total_target, 2),
+            "total_variance": round(100.0*(total_billed-total_target)/total_target, 2) if total_target else 0.0}
+
+
+def workload_detail(vm_id: str) -> dict:
+    """Everything the drill-down page needs for one workload."""
+    jm = db.query("""
+        SELECT miq_vm_id, miq_vm_name, miq_vendor, focus_source,
+               focus_resource_id, focus_billed_cost_sum::NUMERIC(12,2) AS cost,
+               miq_uid_ems, miq_ems_ref, join_key_used, status
+        FROM resource_join_map WHERE miq_vm_id = %(id)s LIMIT 1""", {"id": str(vm_id)})
+    if not jm:
+        return {}
+    head = jm[0]
+    util = db.query("""
+        SELECT ROUND(AVG(cpu_usage_pct)::NUMERIC,1) AS avg_cpu,
+               ROUND(MAX(cpu_usage_pct)::NUMERIC,1) AS max_cpu,
+               ROUND(AVG(mem_usage_pct)::NUMERIC,1) AS avg_mem,
+               ROUND(MAX(mem_usage_pct)::NUMERIC,1) AS max_mem,
+               COUNT(*) AS samples
+        FROM miq_utilization WHERE miq_vm_id = %(id)s""", {"id": int(vm_id)})
+    # daily cost for this resource (from focus_costs joined by resource_id)
+    daily = db.query("""
+        SELECT charge_period_start::date AS day,
+               SUM(billed_cost_usd)::NUMERIC(12,4) AS usd
+        FROM focus_costs WHERE resource_id = %(rid)s
+        GROUP BY 1 ORDER BY 1""", {"rid": head["focus_resource_id"]})
+    # cost decomposition by service_name
+    decomp = db.query("""
+        SELECT service_name, SUM(billed_cost_usd)::NUMERIC(12,4) AS usd
+        FROM focus_costs WHERE resource_id = %(rid)s
+        GROUP BY service_name ORDER BY usd DESC""", {"rid": head["focus_resource_id"]})
+    return {"head": head, "util": util[0] if util else {}, "daily": daily, "decomp": decomp}

@@ -1,0 +1,15 @@
+{% extends "_base.html" %}
+{% block title %}Workload not found{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Workload not found</h1>
+    <div class="tag">No join-map row for vm_id <span class="mono" style="color:var(--amber)">{{ vm_id }}</span>.</div>
+  </div>
+</div>
+<hr class="rule">
+<p style="color:var(--ink-mid);max-width:600px;">
+  This vm_id has no entry in <span class="mono">resource_join_map</span>. Pick a workload from the
+  <a href="/views/utilization" style="color:var(--ink);text-decoration:underline;">utilization × cost</a> view.
+</p>
+{% endblock %}
