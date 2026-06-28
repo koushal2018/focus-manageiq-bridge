@@ -34,6 +34,12 @@ def map_row(row: dict[str, str]) -> tuple[dict[str, object], list[str]]:
     """Project a native-FOCUS row onto the target FOCUS column set."""
     warnings: list[str] = []
 
+    # Version-level deprecated column names (FIN-3): a real FOCUS 1.0 export
+    # (e.g. the FinOps Foundation sample) carries ProviderName/PublisherName,
+    # which v1.3 renamed. Level them BEFORE projecting onto TARGET_COLUMNS, or
+    # ServiceProviderName lands blank and the row fails conformance.
+    row = focus_spec.level_to_v1_3(row)
+
     out: dict[str, object] = {}
     for col in TARGET_COLUMNS:
         out[col] = row.get(col, "")

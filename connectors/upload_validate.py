@@ -39,7 +39,20 @@ def validate_focus_csv(raw: bytes) -> tuple[bool, str]:
     if not header:
         return False, "no header row found"
     cols = {c.strip() for c in header}
-    missing = [c for c in MANDATORY if c not in cols]
+    # Accept deprecated FOCUS column names as satisfying their current-name
+    # requirement (FIN-3): the FinOps Foundation's 1.0 sample uses ProviderName
+    # for ServiceProviderName etc. The normalizer levels these on load, so a
+    # file carrying the older name IS valid — rejecting it would turn away real
+    # reference FOCUS data. Build the set of accepted aliases for each mandatory.
+    from normalizer.focus_spec import DEPRECATED_COLUMN_ALIASES
+    _current_to_deprecated: dict[str, list[str]] = {}
+    for old, new in DEPRECATED_COLUMN_ALIASES.items():
+        _current_to_deprecated.setdefault(new, []).append(old)
+
+    def _present(col: str) -> bool:
+        return col in cols or any(d in cols for d in _current_to_deprecated.get(col, []))
+
+    missing = [c for c in MANDATORY if not _present(c)]
     if missing:
         return False, f"missing required FOCUS column(s): {', '.join(missing)}"
     if next(reader, None) is None:

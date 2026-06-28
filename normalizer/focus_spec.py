@@ -128,3 +128,26 @@ PRICING_CATEGORIES_V1_3 = {
     "Dynamic",
     "Other",
 }
+
+
+# Deprecated → current column aliases (version-leveling, FIN-3). Real FOCUS data
+# spans versions: the FinOps Foundation's own 1.0 sample uses ProviderName /
+# PublisherName, which v1.3 renamed to ServiceProviderName / InvoiceIssuerName
+# (deprecated in 1.3, removed in 1.4). A pipeline that claims to handle "real
+# FOCUS" must accept the older names and level them to the target, or it rejects
+# the reference dataset. Map is {deprecated_name: current_v1_3_name}.
+DEPRECATED_COLUMN_ALIASES = {
+    "ProviderName": "ServiceProviderName",   # deprecated v1.3 (§3.1.47)
+    "PublisherName": "InvoiceIssuerName",    # deprecated v1.3 (§3.1.48)
+}
+
+
+def level_to_v1_3(row: dict) -> dict:
+    """Return a copy of `row` with deprecated column names leveled to their
+    v1.3 names (FIN-3). A deprecated value only fills the current column when
+    the current one is absent/empty — a row carrying both keeps the current."""
+    out = dict(row)
+    for old, new in DEPRECATED_COLUMN_ALIASES.items():
+        if old in out and not (out.get(new) or "").strip():
+            out[new] = out[old]
+    return out

@@ -149,6 +149,13 @@ def _ingest_upload(source_id: str) -> dict:
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     result = dispatcher.run(only_source_id=source_id)
+    # If discover() found nothing new (content-hash dedupe — the file was
+    # already ingested), the dispatched CSV has 0 rows. DO NOT call load_source:
+    # it would DELETE the source's partition and COPY nothing, WIPING the
+    # already-loaded data. A re-load of identical content must be a no-op.
+    if result.get("focus_rows", 0) == 0:
+        result["skipped"] = "no new exports (already ingested) — partition preserved"
+        return result
     loader.load_source(source_id, result["out_csv"])   # may raise LoadConformanceError
     _rebuild_join_and_onprem(root)
     return result
@@ -334,6 +341,54 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
             SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"), [dest])
     obs.audit("upload", _rid(request), source_id=sid, filename=basename,
               bytes=len(raw), focus_rows=result.get("focus_rows"))
+    return {"ok": True, "dispatch": result, "sources": _sources_view()}
+
+
+# The FinOps Foundation's anonymized REAL FOCUS sample (CC BY 4.0), vendored.
+# Proves the pipeline handles real-world FOCUS (version skew, literal NULLs),
+# not just our synthetic data. Labelled clearly as third-party sample, NOT ENBD.
+_FOUNDATION_SAMPLE = os.path.join(
+    _PROJECT_ROOT, "fixtures", "focus_foundation_sample", "focus_sample_1000.csv")
+_FOUNDATION_SOURCE_ID = "foundation-focus-sample"
+
+
+@router.post("/load-sample")
+def connect_load_sample(request: Request = None):
+    """One-click ingest of the FinOps Foundation's anonymized real FOCUS sample
+    through the SAME upload path real uploads use. It loads as its own source
+    partition (incremental, W-15) and — being real cloud data with no ManageIQ
+    inventory — shows honestly as unmatched_focus_only in the join. Demonstrates
+    'we handle real FOCUS', distinct from the synthetic join demo."""
+    if not os.path.exists(_FOUNDATION_SAMPLE):
+        return JSONResponse(
+            {"ok": False, "error": "Foundation sample fixture not found "
+             "(fixtures/focus_foundation_sample/)."}, status_code=404)
+    sid = _FOUNDATION_SOURCE_ID
+    if sid not in {s.source_id for s in registry.load()}:
+        registry.add_source(SourceConfig(
+            source_id=sid, source_type="upload-focus",
+            display_name="FinOps Foundation FOCUS sample (anonymized real, CC BY 4.0)",
+            location=f"out/uploads/{sid}",
+            credential_ref="public:cc-by-4.0-sample", schedule="manual"))
+    with _source_ingest_lock(sid):
+        d = inbox_dir(sid)
+        dest = os.path.join(d, "focus_sample_1000.csv")
+        with open(_FOUNDATION_SAMPLE, "rb") as src, open(dest, "wb") as dst:
+            dst.write(src.read())
+        try:
+            result = _ingest_upload(sid)
+        except Exception as e:
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+            return JSONResponse(
+                {"ok": False, "error": f"sample rejected at load: {e}. Existing "
+                 "data preserved."}, status_code=422)
+        UploadSource().mark_ingested(
+            SourceConfig(sid, "upload-focus", sid, d, "public", "manual"), [dest])
+    obs.audit("load_sample", _rid(request), source_id=sid,
+              focus_rows=result.get("focus_rows"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}
 
 

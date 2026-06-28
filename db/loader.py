@@ -30,6 +30,10 @@ import psycopg2.extras
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Literal "empty" sentinels real exports use instead of an empty cell (FIN-3).
+# Normalized to '' at load so FORCE_NULL → SQL NULL (case-insensitive compare).
+_NULL_SENTINELS = {"NULL", "null", "None", "NONE", "N/A", "n/a", "nan", "NaN"}
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FOCUS_CSV = os.path.join(ROOT, "out", "normalizer", "focus_combined.csv")
 JOIN_CSV = os.path.join(ROOT, "out", "join", "resource_join_map.csv")
@@ -162,6 +166,13 @@ def _build_focus_staging(csv_path: str = FOCUS_CSV) -> tuple[io.StringIO, list[s
                 if csv_col not in row:
                     continue
                 v = row[csv_col]
+                # Real FOCUS exports (e.g. the FinOps Foundation sample) emit the
+                # LITERAL string "NULL" (also "null"/"None") for empty fields,
+                # not an empty cell. COPY rejects "NULL" for NUMERIC/TIMESTAMP
+                # columns, so normalize these sentinels to '' here → FORCE_NULL
+                # turns them into real SQL NULL. (FIN-3 / messy-data class.)
+                if v is not None and v.strip() in _NULL_SENTINELS:
+                    v = ""
                 if db_col in ts_cols:
                     v = _to_utc_iso(v)        # H-8
                 out[db_col] = v
@@ -176,10 +187,12 @@ def _build_focus_staging(csv_path: str = FOCUS_CSV) -> tuple[io.StringIO, list[s
                 except (ValueError, TypeError):
                     out["tags"] = ""   # FORCE_NULL -> SQL NULL
 
-            # H-1 currency normalization → USD
-            ccy = (row.get("BillingCurrency") or "").upper()
+            # H-1 currency normalization → USD. Read from `out` (already
+            # sentinel-normalized) so a literal "NULL" billed_cost doesn't slip
+            # through as a bogus value.
+            ccy = (out.get("billing_currency") or "").upper()
             rate = FX_TO_USD.get(ccy)
-            raw = row.get("BilledCost") or ""
+            raw = out.get("billed_cost") or ""
             if rate is not None and raw not in ("", None):
                 try:
                     out["billed_cost_usd"] = f"{Decimal(str(raw)) * Decimal(str(rate)):.6f}"

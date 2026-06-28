@@ -89,6 +89,25 @@
 </form>
 <div id="upload-result" style="margin-top:16px;"></div>
 
+<div class="section-label"><span class="num">04.</span>Load a real-world sample</div>
+<div class="banner" role="note">
+  <div>
+    <div class="label">Third-party sample · anonymized real data · not ENBD</div>
+    <div class="text">
+      Loads the <strong>FinOps Foundation's official FOCUS sample</strong>
+      (<a href="https://github.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS-Sample-Data" style="color:var(--amber)">FOCUS-Sample-Data</a>,
+      anonymized real AWS/Microsoft/Oracle billing, CC BY 4.0) through the same
+      upload pipeline. It proves the platform ingests <strong>real-world FOCUS</strong>
+      — including FOCUS 1.0 column names and literal <code class="mono">"NULL"</code>
+      values — not just our synthetic data. It is <strong>not ENBD data</strong>,
+      and because it has no matching ManageIQ inventory it appears honestly as
+      <code class="mono">unmatched_focus_only</code> in the join.
+    </div>
+  </div>
+</div>
+<button id="sampleb" type="button" class="askbtn">Load the FinOps Foundation sample</button>
+<div id="sample-result" style="margin-top:16px;"></div>
+
 <div id="connect-result" style="margin-top:24px;"></div>
 
 <script>
@@ -116,6 +135,16 @@
     el.innerHTML = banner('Ingested',
       'Uploaded export validated and ingested. Dispatcher produced <strong>'+data.dispatch.focus_rows+'</strong> FOCUS rows. Reloading…');
     setTimeout(() => location.reload(), 1200);
+  });
+  document.getElementById('sampleb').addEventListener('click', async () => {
+    const el = document.getElementById('sample-result');
+    el.innerHTML = '<p style="color:var(--ink-mid)">Ingesting the FinOps Foundation sample…</p>';
+    const r = await fetch('/connect/load-sample', {method:'POST'});
+    const data = await r.json();
+    if (!r.ok) { el.innerHTML = banner('Rejected', data.error || 'Load failed'); return; }
+    el.innerHTML = banner('Loaded (real-world sample)',
+      'FinOps Foundation FOCUS sample ingested through the real pipeline — <strong>'+data.dispatch.focus_rows+'</strong> rows. Anonymized third-party data, not ENBD. Reloading…');
+    setTimeout(() => location.reload(), 1400);
   });
   document.getElementById('addf').addEventListener('submit', async e => {
     e.preventDefault();
