@@ -354,6 +354,61 @@ def make_rng() -> random.Random:
     return random.Random(RNG_SEED)
 
 
+def gen_scale() -> int:
+    """Per-day row fan-out multiplier. FOCUS_GEN_SCALE=1 (default) is the
+    fast, hand-traceable / CI size; the demo uses a larger value. Floored at 1."""
+    import os
+    try:
+        return max(1, int(os.environ.get("FOCUS_GEN_SCALE", "1")))
+    except ValueError:
+        return 1
+
+
+# Multiple sub-accounts per provider so spend spreads across accounts the way a
+# real payer/management-group/tenancy does. All obviously DEMO.
+SUB_ACCOUNTS: dict[str, list[str]] = {
+    "aws":   ["DEMO-prod-9001", "DEMO-nonprod-9002", "DEMO-shared-9003", "DEMO-data-9004"],
+    "azure": ["rg-prod-demo", "rg-nonprod-demo", "rg-shared-demo", "rg-data-demo"],
+    "oci":   ["DEMO-cmp-prod", "DEMO-cmp-nonprod", "DEMO-cmp-analytics"],
+}
+
+
+def tag_sparsity(rng: random.Random, tags: dict) -> str:
+    """Real tag coverage is partial. Return a JSON tag string with realistic
+    sparsity buckets (deterministic given rng):
+      ~20% fully tagged · ~50% env-only · ~20% empty {} · ~10% malformed."""
+    import json
+    roll = rng.random()
+    if roll < 0.20:
+        return json.dumps(tags, separators=(",", ":"))
+    if roll < 0.70:
+        env = tags.get("env", "prod")
+        return json.dumps({"env": env}, separators=(",", ":"))
+    if roll < 0.90:
+        return "{}"
+    return '{bad json'  # malformed on purpose — stresses the tag parser
+
+
+def commitment_fields(rng: random.Random) -> tuple[str, str]:
+    """~30% of compute rows are covered by a commitment. Returns
+    (CommitmentDiscountId, CommitmentDiscountStatus)."""
+    if rng.random() < 0.30:
+        return (f"sp-DEMO-{rng.randint(1000, 9999)}", "Used")
+    return ("", "")
+
+
+def effective_spread(rng: random.Random, billed_usd: float,
+                     has_commitment: bool) -> tuple[float, float, float]:
+    """Return (effective, list, contracted) USD. A commitment discounts
+    EffectiveCost/ContractedCost below BilledCost; ListCost is the on-demand
+    rate (== billed here). No commitment → all equal billed."""
+    if not has_commitment:
+        return (billed_usd, billed_usd, billed_usd)
+    eff = round(billed_usd * 0.70, 6)
+    con = round(billed_usd * 0.72, 6)
+    return (eff, billed_usd, con)
+
+
 def hourly_periods(days: int, start: dt.datetime | None = None) -> Iterable[tuple[dt.datetime, dt.datetime]]:
     """Yield (start, end) tuples for `days` of hourly buckets.
 
