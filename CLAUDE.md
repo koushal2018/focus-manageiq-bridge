@@ -32,10 +32,16 @@ EBA-BACKLOG.md short ordered list of what ENBD builds during the sprint
 ## Skills loaded for this project
 - `manageiq-sme` — user-level at `~/.claude/skills/manageiq-sme/`. Originally written for a sibling project (`enbd_manageiq`) so its project-specific paths (e.g. `ai/manageiq_client.py`, `focus_v1_2_view`) DO NOT apply here. The ManageIQ API/VMDB knowledge does.
 - Use the `/frontend-design` skill when building UI components.
+- **`/reseed`** (project, user-only) — rebuild web image → re-seed synthetic data → pytest → conformance → route smoke. Run after any generator/normalizer/join/loader/template change.
+
+## Tests & CI
+- **`tests/`** — `test_sql_guard.py` (pure logic, always runs) + `test_data_integrity.py` (DB-backed, skips if no Postgres). Guards the B-6/B-7 currency/join bugs + the SQL allowlist. Run: `FOCUS_PG_HOST=127.0.0.1 FOCUS_PG_PASS=focus_app_demo .venv/bin/python -m pytest tests/ -q`.
+- **`.github/workflows/ci.yml`** — py_compile + pytest with a real Postgres service (seeds, then runs the integrity tests) on every push/PR. AI layer off in CI.
+- pytest is dev/CI only (in `requirements.txt`), deliberately NOT in the production image (non-root `/opt/venv` is read-only).
 
 ## MCP servers (declared in `.mcp.json`)
 - **`focus-finops`** (HTTP) — authoritative FOCUS column/spec lookup. Use it before quoting FOCUS rules from memory.
-- **Postgres MCP — DEFERRED.** Install when the docker-compose stack actually has Postgres running: `claude mcp add postgres -- uvx postgres-mcp postgres://focus:focus@localhost:5432/focus`. Pointed at `localhost` only — never at real ENBD data.
+- **`postgres`** (stdio, `uvx postgres-mcp --access-mode restricted`) — read-only query/introspection of the local `focus` DB. Requires the compose stack up (the db now publishes `127.0.0.1:5432`). Localhost + synthetic only — never point at real ENBD data.
 
 ## Hooks (in `.claude/settings.json`; scripts in `.claude/hooks/`)
 - **`PostToolUse` on Edit|Write** → `python3 -m py_compile` on `*.py`. Catches syntax errors at write-time.

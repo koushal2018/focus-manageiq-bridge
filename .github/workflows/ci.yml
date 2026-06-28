@@ -1,0 +1,58 @@
+name: CI
+
+# Gates every push/PR: syntax, the SQL-guard logic tests, and — with a real
+# Postgres — the data-integrity tests that catch the B-6/B-7 currency/join
+# bugs that shipped twice. Synthetic data only; no secrets, no cloud calls.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: focus_app
+          POSTGRES_PASSWORD: focus_app_demo
+          POSTGRES_DB: focus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U focus_app -d focus"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+
+    env:
+      FOCUS_PG_HOST: localhost
+      FOCUS_PG_PORT: "5432"
+      FOCUS_PG_USER: focus_app
+      FOCUS_PG_PASS: focus_app_demo
+      FOCUS_PG_DB: focus
+      BEDROCK_DISABLED: "1"   # AI layer stays off in CI — no cloud calls
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Syntax check (py_compile, whole tree)
+        run: python -m compileall -q ai connectors db generators join normalizer onprem web
+
+      - name: Apply schema
+        run: psql "postgresql://focus_app:focus_app_demo@localhost:5432/focus" -f db/schema.sql
+
+      - name: Seed synthetic data
+        run: python -m docker.seed
+
+      - name: Run tests (logic + data integrity)
+        run: python -m pytest tests/ -q

@@ -19,6 +19,10 @@ services:
       POSTGRES_DB: ${FOCUS_PG_DB:-focus}
     volumes:
       - finops_pgdata:/var/lib/postgresql/data
+    # Bind to 127.0.0.1 ONLY — host-local dev convenience (Postgres MCP,
+    # host-side pytest), never 0.0.0.0. Synthetic data, localhost only.
+    ports:
+      - "127.0.0.1:5432:5432"
     # Memory cap — a deliberate guard against the LM-1 class of problem
     # (a DB container is tiny; this just makes the ceiling explicit).
     mem_limit: 512m

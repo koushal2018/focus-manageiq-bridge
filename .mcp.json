@@ -3,6 +3,15 @@
     "focus-finops": {
       "type": "http",
       "url": "https://focus.finops.org/wp-json/focus/v1/mcp"
+    },
+    "postgres": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "postgres-mcp",
+        "--access-mode", "restricted",
+        "postgresql://focus_app:focus_app_demo@127.0.0.1:5432/focus"
+      ]
     }
   }
 }

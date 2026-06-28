@@ -16,3 +16,6 @@ gunicorn>=21.2,<24.0
 # Test client for in-process route testing (Starlette TestClient needs httpx).
 httpx>=0.27,<1.0
 
+
+# Dev/CI only — test runner. Not needed at runtime.
+pytest>=8.0,<9.0
