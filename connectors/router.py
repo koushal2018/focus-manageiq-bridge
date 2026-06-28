@@ -31,6 +31,27 @@ def _rid(request: Request | None) -> str:
     """Best-effort request id from the observability middleware."""
     return getattr(getattr(request, "state", None), "request_id", "") if request else ""
 
+
+import contextlib as _contextlib
+import fcntl as _fcntl
+
+
+@_contextlib.contextmanager
+def _source_ingest_lock(source_id: str):
+    """Serialize the write→dispatch→load→mark sequence for a given source so two
+    concurrent uploads of the SAME source can't interleave (one marking the
+    other's file ingested before it loads → silent data loss, review finding).
+    A POSIX flock on a per-source sidecar; single-host (the deploy target is
+    single-tenant — a multi-replica setup would use an advisory DB lock)."""
+    d = inbox_dir(source_id)
+    f = open(os.path.join(d, ".ingest.lock"), "w")
+    try:
+        _fcntl.flock(f, _fcntl.LOCK_EX)
+        yield
+    finally:
+        _fcntl.flock(f, _fcntl.LOCK_UN)
+        f.close()
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(os.path.dirname(THIS_DIR), "web", "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
@@ -281,31 +302,36 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
     if not basename.lower().endswith(".csv"):
         basename += ".csv"
     dest = os.path.join(d, basename)
-    with open(dest, "wb") as f:
-        f.write(raw)
 
-    # Incremental, per-source ingest (W-15): only THIS source is dispatched and
-    # only its partition of focus_costs is replaced — no global TRUNCATE, cost
-    # is O(this source) not O(all history). The per-source load is guarded by an
-    # in-txn conformance gate; if this upload's rows would be non-conformant the
-    # partition load ROLLS BACK and every other source is untouched. In that
-    # case the file we just wrote is poison — remove it so it isn't re-ingested,
-    # and surface the error.
-    try:
-        result = _ingest_upload(sid)
-    except Exception as e:
+    # Hold a per-source lock across write→ingest→mark so two concurrent uploads
+    # of the SAME source can't interleave (review finding: one marking the
+    # other's file ingested before it loads → silent drop).
+    with _source_ingest_lock(sid):
+        with open(dest, "wb") as f:
+            f.write(raw)
+
+        # Incremental, per-source ingest (W-15): only THIS source is dispatched
+        # and only its partition of focus_costs is replaced — no global
+        # TRUNCATE, cost is O(this source). The per-source load is guarded by an
+        # in-txn conformance gate; if this upload's rows would be non-conformant
+        # the partition load ROLLS BACK and every other source is untouched. The
+        # file we wrote is then poison — remove it so it isn't re-ingested.
         try:
-            os.remove(dest)
-        except OSError:
-            pass
-        obs.audit("upload_rejected", _rid(request), source_id=sid,
-                  filename=basename, bytes=len(raw), reason=str(e))
-        return JSONResponse(
-            {"ok": False, "error": f"upload rejected at load: {e}. The existing "
-             "data was preserved; nothing was changed."},
-            status_code=422)
-    UploadSource().advance_watermark(
-        SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"))
+            result = _ingest_upload(sid)
+        except Exception as e:
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+            obs.audit("upload_rejected", _rid(request), source_id=sid,
+                      filename=basename, bytes=len(raw), reason=str(e))
+            return JSONResponse(
+                {"ok": False, "error": f"upload rejected at load: {e}. The "
+                 "existing data was preserved; nothing was changed."},
+                status_code=422)
+        # Mark ONLY this dispatched file ingested (not the whole inbox).
+        UploadSource().mark_ingested(
+            SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"), [dest])
     obs.audit("upload", _rid(request), source_id=sid, filename=basename,
               bytes=len(raw), focus_rows=result.get("focus_rows"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}

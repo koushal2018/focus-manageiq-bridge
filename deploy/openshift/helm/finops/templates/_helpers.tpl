@@ -70,6 +70,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
        Secret (G-1/G-6 — never verify=False, never inline creds). */}}
 {{- with .Values.miq }}
 {{- if .url }}
+{{- if and (hasPrefix "https://" .url) (not .caBundlePath) }}
+{{- fail "miq.url is HTTPS but miq.caBundlePath is empty — the collector refuses HTTPS without a trusted CA bundle (G-6, no verify=False). Set miq.caBundlePath to a mounted CA PEM." }}
+{{- end }}
 - name: MIQ_URL
   value: {{ .url | quote }}
 - name: MIQ_USER

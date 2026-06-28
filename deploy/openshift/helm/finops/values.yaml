@@ -39,7 +39,11 @@ bedrock:
 tenant:
   orgName: ""             # e.g. "Emirates NBD"
   productName: ""         # e.g. "CloudLens FinOps"
-  reportingCurrency: ""   # e.g. "USD" — FX rates stay in config/tenant.json
+  # Reporting currency is pinned to USD today (the pipeline normalizes to USD;
+  # PKG-2 tracks making it configurable). Leave blank; a non-USD value fails
+  # loudly at startup rather than silently doing nothing. FX rates INTO USD
+  # remain configurable in config/tenant.json (fx_to_reporting).
+  reportingCurrency: ""
 
 # App-layer Basic Auth on the (destructive) console — defence-in-depth behind
 # the cluster Route / edge (CX-6). OFF unless enabled AND the secret exists.

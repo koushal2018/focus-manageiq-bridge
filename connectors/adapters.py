@@ -97,18 +97,30 @@ class UploadSource:
                                           export_id=name, uri=p))
         return found
 
-    def advance_watermark(self, cfg: SourceConfig) -> None:
-        """Record the content hash of every current *.csv as ingested, so
-        identical content isn't re-ingested on the next dispatch. (Name kept
-        for back-compat with the route handler; it now persists hashes.)"""
+    def mark_ingested(self, cfg: SourceConfig, paths: list[str]) -> None:
+        """Record the content hash of ONLY the given just-ingested files, so
+        identical content isn't re-ingested next dispatch. Marking only the
+        specific files (not every *.csv in the inbox) avoids a race where a
+        concurrent upload's not-yet-ingested file gets marked seen and silently
+        dropped (review finding). Best-effort per file."""
         import json
-        d = inbox_dir(cfg.source_id)
         seen = self._ingested_hashes(cfg.source_id)
-        for name in os.listdir(d):
-            if name.endswith(".csv"):
-                seen.add(_sha256_file(os.path.join(d, name)))
+        for p in paths:
+            try:
+                if os.path.exists(p) and p.endswith(".csv"):
+                    seen.add(_sha256_file(p))
+            except OSError:
+                continue
         with open(self._ingested_path(cfg.source_id), "w") as f:
             json.dump(sorted(seen), f)
+
+    def advance_watermark(self, cfg: SourceConfig) -> None:
+        """DEPRECATED (race-prone): marks EVERY *.csv in the inbox as ingested.
+        Retained only for callers that ingest the whole inbox synchronously.
+        Prefer mark_ingested(cfg, [paths]) with the specific dispatched files."""
+        d = inbox_dir(cfg.source_id)
+        self.mark_ingested(cfg, [os.path.join(d, n) for n in os.listdir(d)
+                                 if n.endswith(".csv")])
 
     def normalize(self, cfg: SourceConfig, export: DiscoveredExport) -> NormalizeResult:
         rows, report = focus_native_to_focus.normalize_csv(export.uri)

@@ -75,6 +75,21 @@ def config() -> dict:
             cfg[key] = os.environ[env]
     # Invariant: reporting_currency must be representable at rate 1.0.
     rc = (cfg.get("reporting_currency") or "USD").upper()
+    # HONESTY GUARD (DEP-1 review): the loader, join, and templates currently
+    # normalize to and display USD only (db.loader uses generators.common.
+    # FX_TO_USD; templates render the "USD" literal). A non-USD reporting
+    # currency here would be a knob that silently does nothing — and worse,
+    # would reject non-USD/AED rows at the load gate. Rather than ship a
+    # misleading control, reject it loudly until the loader/queries consume
+    # tenant.fx_to_reporting end to end (tracked as a follow-on; see GOTCHAS
+    # PKG-2). FX RATES are still tenant-configurable; the reporting CURRENCY
+    # is pinned to USD.
+    if rc != "USD":
+        raise ValueError(
+            f"reporting_currency={rc!r} is not yet supported — the pipeline "
+            "normalizes to USD. Set 'USD' (FX rates into USD remain "
+            "configurable in fx_to_reporting). Multi-reporting-currency is a "
+            "tracked follow-on (PKG-2).")
     cfg["reporting_currency"] = rc
     cfg["fx_to_reporting"].setdefault(rc, 1.0)
     return cfg

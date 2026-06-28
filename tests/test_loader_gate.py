@@ -84,6 +84,58 @@ def test_gate_raises_on_out_of_set_service_category():
         conn.close()
 
 
+def test_aed_partition_roundtrips_through_export_without_double_conversion(tmp_path):
+    """The B-7 bug class, end to end: load an AED-billed partition via the
+    incremental path, run export_focus_costs_csv → resource_join_map.build, and
+    confirm the join's per-resource cost equals the USD-normalized value
+    (converted ONCE, ~0.272×AED), NOT the raw AED and NOT AED×3.6725. This is
+    the seam the review flagged as untested."""
+    from decimal import Decimal
+    from db import loader
+    from web import db
+    from generators.common import FX_TO_USD
+    conn = _conn_or_skip()
+    conn.close()
+
+    sid = "test-aed-roundtrip"
+    rid = "i-aed-roundtrip-1"
+    aed_billed = 367.25  # exactly 100 USD at the pegged rate
+    hdr = ("_source,_source_id,ServiceCategory,BillingCurrency,BilledCost,"
+           "ChargePeriodStart,ChargePeriodEnd,ServiceProviderName,ResourceId")
+    p = tmp_path / f"{sid}.csv"
+    p.write_text(hdr + "\n" + (
+        f"azure,{sid},Compute,AED,{aed_billed},2026-06-01T00:00:00+00:00,"
+        f"2026-06-02T00:00:00+00:00,Microsoft,{rid}") + "\n")
+    try:
+        loader.load_source(sid, str(p))
+        # the loaded row's USD value is converted once
+        usd = db.query("SELECT billed_cost_usd FROM focus_costs WHERE resource_id=%(r)s",
+                       {"r": rid})[0]["billed_cost_usd"]
+        expected_usd = round(aed_billed * FX_TO_USD["AED"], 2)
+        assert round(float(usd), 2) == expected_usd  # ~100.00, not 367.25, not 1349
+
+        # export the FULL table and rebuild the join; the join sums in USD too
+        combined = tmp_path / "combined.csv"
+        loader.export_focus_costs_csv(str(combined))
+        from join import resource_join_map
+        rows = resource_join_map.build(str(combined),
+                                       miq_vms=[])  # no MIQ → focus-only is fine
+        ours = [r for r in rows if r.focus_resource_id == rid]
+        assert ours, "exported AED row did not survive the round-trip"
+        join_cost = float(Decimal(ours[0].focus_billed_cost_sum))
+        # join recomputes USD from the exported ORIGINAL-currency BilledCost;
+        # must match the loader's USD, i.e. converted once.
+        assert round(join_cost, 2) == expected_usd, (
+            f"join cost {join_cost} != USD {expected_usd} — currency seam broken")
+    finally:
+        import psycopg2
+        c = psycopg2.connect(**loader._conn_kwargs())
+        c.autocommit = True
+        with c.cursor() as cur:
+            cur.execute("DELETE FROM focus_costs WHERE source_id=%s", (sid,))
+        c.close()
+
+
 def test_load_source_replaces_only_its_partition(tmp_path):
     """W-15: load_source(sid, csv) must DELETE+INSERT only sid's rows, leaving
     every other source's rows untouched — and a second load of the same sid

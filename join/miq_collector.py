@@ -71,10 +71,12 @@ def collect_utilization(vms: list[dict], client=miq_client) -> list[dict]:
             ts = r.get("timestamp")
             if ts is None or (cpu is None and mem is None):
                 continue  # a rollup with no usable signal — skip, don't invent
+            interval_name = (r.get("capture_interval_name") or "hourly").lower()
+            interval_secs = {"hourly": 3600, "daily": 86400}.get(interval_name, 3600)
             rows.append({
                 "miq_vm_id": vm_id,
                 "timestamp": ts,
-                "capture_interval": r.get("capture_interval_name") == "hourly" and 3600 or 3600,
+                "capture_interval": interval_secs,
                 "cpu_usage_pct": round(float(cpu), 4) if cpu is not None else None,
                 "mem_usage_pct": round(float(mem), 4) if mem is not None else None,
                 "resource_name": vm.get("name", ""),

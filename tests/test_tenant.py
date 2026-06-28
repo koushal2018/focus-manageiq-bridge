@@ -28,17 +28,31 @@ def test_config_file_overrides(tmp_path, monkeypatch):
     p = tmp_path / "tenant.json"
     p.write_text(json.dumps({
         "org_name": "Acme Bank", "product_name": "MoneyLens",
-        "reporting_currency": "EUR",
-        "fx_to_reporting": {"EUR": 1.0, "USD": 0.93},
+        "reporting_currency": "USD",
+        "fx_to_reporting": {"USD": 1.0, "AED": 0.272},
     }))
     _reload(monkeypatch, p)
     for env in list(tenant._ENV_OVERRIDES.values()):
         monkeypatch.delenv(env, raising=False)
     c = tenant.config()
     assert c["org_name"] == "Acme Bank"
-    assert c["reporting_currency"] == "EUR"
-    # reporting currency is guaranteed representable at 1.0
-    assert c["fx_to_reporting"]["EUR"] == 1.0
+    assert c["product_name"] == "MoneyLens"
+    assert c["reporting_currency"] == "USD"
+
+
+def test_non_usd_reporting_currency_rejected_loudly(tmp_path, monkeypatch):
+    # DEP-1 honesty guard: a non-USD reporting currency must FAIL, not silently
+    # do nothing (the loader/templates are USD-only today).
+    import pytest
+    p = tmp_path / "tenant.json"
+    p.write_text(json.dumps({"reporting_currency": "EUR",
+                             "fx_to_reporting": {"EUR": 1.0}}))
+    _reload(monkeypatch, p)
+    for env in list(tenant._ENV_OVERRIDES.values()):
+        monkeypatch.delenv(env, raising=False)
+    with pytest.raises(ValueError) as ei:
+        tenant.config()
+    assert "USD" in str(ei.value)
     tenant.config.cache_clear()
 
 
