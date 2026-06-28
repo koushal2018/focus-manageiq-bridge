@@ -38,6 +38,18 @@ SERVICE_CATEGORIES_V1_3 = {
 SERVICE_CATEGORY_REQUIRED = True
 SERVICE_CATEGORY_ALLOWS_NULL = False
 
+# Closed set of allowed ChargeCategory values per FOCUS v1.3. Case-sensitive.
+# Real exports are NOT all "Usage" — taxes, commitment purchases, credits,
+# refunds and adjustments all appear and break naive SUM(BilledCost).
+CHARGE_CATEGORIES_V1_3 = {
+    "Usage",
+    "Purchase",
+    "Tax",
+    "Credit",
+    "Adjustment",
+    "Refund",
+}
+
 
 # FOCUS v1.3 column IDs we emit (subset that matters for this PoC).
 # Sourced from focus-finops MCP list_columns v1-3 on 2026-06-25.
@@ -85,4 +97,8 @@ FOCUS_COLUMNS_V1_3 = [
     "PricingUnit",
     # Tagging
     "Tags",
+    # Commitment discounts (Savings Plans / Reserved / OCI commitments). Their
+    # presence is why EffectiveCost can differ from BilledCost/ListCost.
+    "CommitmentDiscountId",
+    "CommitmentDiscountStatus",
 ]
