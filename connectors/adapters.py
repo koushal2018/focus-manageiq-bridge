@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 
 from connectors.contract import DiscoveredExport, NormalizeResult, SourceConfig
+from connectors.api_pull import AwsCostExplorerSource, AzureExportSource
 from normalizer import aws_to_focus, azure_to_focus, oci_to_focus
 from normalizer import focus_native_to_focus
 
@@ -164,6 +165,8 @@ ADAPTERS: dict[str, object] = {
         AwsFocusExportAdapter(), AzureFocusExportAdapter(), OciFocusExportAdapter(),
         # user-upload path (real ingestion for the MVP)
         UploadSource(),
+        # API-pull (deferred; registered-but-stubbed — see api_pull.py)
+        AwsCostExplorerSource(), AzureExportSource(),
         # provider-native billing formats (historical path)
         AwsCurAdapter(), AzureExportAdapter(), OciUsageAdapter(),
     )
