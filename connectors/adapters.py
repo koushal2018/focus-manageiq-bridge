@@ -34,6 +34,51 @@ def _local_export(cfg: SourceConfig) -> list[DiscoveredExport]:
     return [DiscoveredExport(source_id=cfg.source_id, export_id=os.path.basename(path), uri=path)]
 
 
+UPLOAD_ROOT = os.path.join(ROOT, "out", "uploads")
+
+
+def inbox_dir(source_id: str) -> str:
+    """Per-source upload inbox. The upload endpoint writes validated files here;
+    UploadSource.discover() lists them. Created on demand."""
+    d = os.path.join(UPLOAD_ROOT, source_id)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+class UploadSource:
+    """A source whose exports arrive by user upload, not cloud fetch. discover()
+    lists *.csv in the source's inbox newer than the watermark; normalize() is
+    the same native-FOCUS mapping every other source uses — the only difference
+    from a future S3 source is WHERE the bytes came from."""
+    source_type = "upload-focus"
+
+    def discover(self, cfg: SourceConfig) -> list[DiscoveredExport]:
+        d = inbox_dir(cfg.source_id)
+        wm_path = os.path.join(d, ".watermark")
+        watermark = os.path.getmtime(wm_path) if os.path.exists(wm_path) else 0.0
+        found = []
+        for name in sorted(os.listdir(d)):
+            if not name.endswith(".csv"):
+                continue
+            p = os.path.join(d, name)
+            if os.path.getmtime(p) <= watermark:
+                continue  # already ingested in a prior run
+            found.append(DiscoveredExport(source_id=cfg.source_id,
+                                          export_id=name, uri=p))
+        return found
+
+    def advance_watermark(self, cfg: SourceConfig) -> None:
+        """Touch the watermark so already-seen files aren't re-ingested."""
+        d = inbox_dir(cfg.source_id)
+        open(os.path.join(d, ".watermark"), "w").close()
+
+    def normalize(self, cfg: SourceConfig, export: DiscoveredExport) -> NormalizeResult:
+        rows, report = focus_native_to_focus.normalize_csv(export.uri)
+        for r in rows:
+            r["_source"] = "upload"
+        return NormalizeResult(focus_rows=rows, report=report)
+
+
 class AwsCurAdapter:
     source_type = "aws-cur"
 
@@ -117,6 +162,8 @@ ADAPTERS: dict[str, object] = {
     for a in (
         # native-FOCUS (current/production path)
         AwsFocusExportAdapter(), AzureFocusExportAdapter(), OciFocusExportAdapter(),
+        # user-upload path (real ingestion for the MVP)
+        UploadSource(),
         # provider-native billing formats (historical path)
         AwsCurAdapter(), AzureExportAdapter(), OciUsageAdapter(),
     )
