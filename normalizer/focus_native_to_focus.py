@@ -62,6 +62,13 @@ def map_row(row: dict[str, str]) -> tuple[dict[str, object], list[str]]:
         warnings.append("BillingCurrency is empty (FOCUS mandates non-null)")
         fatal = True
 
+    # ChargeCategory: if present, must be in the FOCUS closed set. Empty is
+    # left alone (not all rows carry it); a wrong value is a fatal drop.
+    cc = (out.get("ChargeCategory") or "").strip()
+    if cc and cc not in focus_spec.CHARGE_CATEGORIES_V1_3:
+        warnings.append(f"ChargeCategory {cc!r} not in FOCUS closed set")
+        fatal = True
+
     out["_fatal"] = fatal
     return out, warnings
 
