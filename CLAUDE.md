@@ -37,8 +37,11 @@ EBA-BACKLOG.md short ordered list of what ENBD builds during the sprint
 - **`focus-finops`** (HTTP) — authoritative FOCUS column/spec lookup. Use it before quoting FOCUS rules from memory.
 - **Postgres MCP — DEFERRED.** Install when the docker-compose stack actually has Postgres running: `claude mcp add postgres -- uvx postgres-mcp postgres://focus:focus@localhost:5432/focus`. Pointed at `localhost` only — never at real ENBD data.
 
-## Hooks (in `.claude/settings.json`)
+## Hooks (in `.claude/settings.json`; scripts in `.claude/hooks/`)
 - **`PostToolUse` on Edit|Write** → `python3 -m py_compile` on `*.py`. Catches syntax errors at write-time.
+- **`PostToolUse` on Edit|Write** → `currency-tripwire.sh`: warns (never blocks) when a `*.py` aggregates raw `billed_cost` without `_usd` — the B-6/B-7 bug class.
+- **`PreToolUse` on Bash (git commit/push)** → `secret-guard.sh`: scans staged diff for credential patterns; **blocks (exit 2)** on a hit. Prevents a CX-6/G-1 secret leak.
+- **`Stop`** → `git-work-at-risk.sh`: surfaces uncommitted files + unpushed commits (ENV-1) as a `systemMessage`.
 - **`UserPromptSubmit`** → injects a per-turn reminder to capture non-obvious findings in `GOTCHAS.md`.
 - **`SessionStart`** → echoes `tail -30 GOTCHAS.md` when it exists, so the running gotcha list is always in context.
 
