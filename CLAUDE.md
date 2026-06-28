@@ -42,6 +42,11 @@ EBA-BACKLOG.md short ordered list of what ENBD builds during the sprint
 ## MCP servers (declared in `.mcp.json`)
 - **`focus-finops`** (HTTP) — authoritative FOCUS column/spec lookup. Use it before quoting FOCUS rules from memory.
 - **`postgres`** (stdio, `uvx postgres-mcp --access-mode restricted`) — read-only query/introspection of the local `focus` DB. Requires the compose stack up (the db now publishes `127.0.0.1:5432`). Localhost + synthetic only — never point at real ENBD data.
+- **`context7`** (stdio, `npx @upstash/context7-mcp`) — up-to-date library/framework docs (FastAPI, boto3, etc.). Verified it starts.
+- **`memory`** (stdio, `npx @modelcontextprotocol/server-memory`) — generic cross-session memory. Note: GOTCHAS.md + file auto-memory remain the project's primary, deliverable memory; this is supplementary.
+- **`github`** (stdio, `npx @modelcontextprotocol/server-github`) — **inert until you set `GITHUB_PERSONAL_ACCESS_TOKEN`** in the environment (no token is committed; the config references the env var). `gh` CLI is not installed.
+- AWS MCP is **already available via the `aws-core` plugin** (`mcp__plugin_aws-core_aws-mcp__*`) — do NOT add a second; it would duplicate.
+- All `npx`/`uvx` servers register at **session start** and need Node (installed) / uv. Adding to `.mcp.json` does not load them mid-session.
 
 ## Hooks (in `.claude/settings.json`; scripts in `.claude/hooks/`)
 - **`PostToolUse` on Edit|Write** → `python3 -m py_compile` on `*.py`. Catches syntax errors at write-time.
