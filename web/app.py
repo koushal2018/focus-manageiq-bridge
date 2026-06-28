@@ -179,6 +179,13 @@ def view_carbon(request: Request):
     )
 
 
+@app.get("/faq", response_class=HTMLResponse)
+def faq(request: Request):
+    return templates.TemplateResponse(
+        request, "view_faq.html", {"active": "faq"},
+    )
+
+
 # Health endpoint for sanity / smoke
 @app.get("/healthz")
 def healthz():

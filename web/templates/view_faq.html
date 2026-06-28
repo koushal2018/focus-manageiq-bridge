@@ -1,0 +1,141 @@
+{% extends "_base.html" %}
+{% block title %}FAQ · CloudLens FinOps{% endblock %}
+{% block extra_css %}
+  .faq-group { margin-bottom: 14px; }
+  .faq-q { background: rgba(255,255,255,0.55); border: 1px solid var(--border); border-radius: 18px; margin-bottom: 10px; overflow: hidden; }
+  .faq-q summary { cursor: pointer; padding: 16px 20px; font-family: var(--sans); font-size: 15px; font-weight: 500; color: var(--ink); list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .faq-q summary::-webkit-details-marker { display: none; }
+  .faq-q summary::after { content: "+"; font-family: var(--mono); font-size: 18px; color: var(--accent-deep); flex-shrink: 0; }
+  .faq-q[open] summary::after { content: "–"; }
+  .faq-q[open] summary { border-bottom: 1px solid var(--border); }
+  .faq-a { padding: 16px 20px 18px; font-size: 13.5px; line-height: 1.65; color: var(--ink-soft); }
+  .faq-a p { margin-bottom: 10px; } .faq-a p:last-child { margin-bottom: 0; }
+  .faq-a strong { color: var(--ink); font-weight: 600; }
+  .faq-a code { font-family: var(--mono); font-size: 12px; color: var(--accent-deep); }
+  .faq-a a { color: var(--accent-deep); }
+{% endblock %}
+{% block content %}
+
+<div class="banner" role="note">
+  <div>
+    <div class="label">About this PoC</div>
+    <div class="text">
+      A 3-day de-risking spike for the ENBD multi-cloud cost engagement. The point is to show what a
+      FOCUS-conformant console <em>can</em> and <em>can't</em> answer — honestly — before ENBD's team builds the
+      real thing. <strong>Every figure here is synthetic</strong> (<code class="mono" style="color:var(--accent-deep)">DEMO-</code>
+      prefixed) and USD-normalised. This page answers the questions we get asked most.
+    </div>
+  </div>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>Frequently asked <em>questions</em></h1>
+    <div class="tag">What this is, what the data means, and what it would take to make it real.</div>
+  </div>
+  <div class="stamp"><strong>Read me first</strong><br>before the demo<br>synthetic PoC</div>
+</div>
+
+<hr class="rule">
+
+<div class="section-label"><span class="num">01.</span>The basics</div>
+<div class="faq-group">
+  <details class="faq-q"><summary>Is this real Emirates NBD data?</summary>
+    <div class="faq-a"><p><strong>No.</strong> Every number, account ID, resource name and workload is synthetic and prefixed
+    <code>DEMO-</code> so it can never be mistaken for production. Account IDs are fake, costs are generated, and no real
+    cloud credentials or ENBD systems are connected. The shapes are realistic; the values are invented.</p></div>
+  </details>
+  <details class="faq-q"><summary>What does this PoC actually demonstrate?</summary>
+    <div class="faq-a"><p>That multi-cloud cost (AWS, Azure, OCI) plus on-prem can be normalised to the
+    <strong>FOCUS v1.3</strong> open spec, joined to <strong>ManageIQ</strong> inventory and utilization, and presented
+    against four leadership requirements — each with an honest verdict on whether FOCUS handles it
+    <strong>natively, partially, conditionally, or not at all</strong>. Verdicts before numbers.</p></div>
+  </details>
+  <details class="faq-q"><summary>Why USD when ENBD reports in AED?</summary>
+    <div class="faq-a"><p>AED is pegged to USD at <strong>3.6725</strong>, so we normalise every provider's cost to USD as a
+    single reporting currency. Mixing currencies in a total is the classic silent error — Azure bills in AED, AWS/OCI in
+    USD. The console always shows the USD-normalised figure and labels the source currency separately so nothing is mixed.</p></div>
+  </details>
+</div>
+
+<div class="section-label"><span class="num">02.</span>The data &amp; the join</div>
+<div class="faq-group">
+  <details class="faq-q"><summary>Why are only some workloads joined to inventory?</summary>
+    <div class="faq-a"><p>The cost-to-inventory join is the hard part. FOCUS rows carry a <code>ResourceId</code>; ManageIQ
+    carries its own keys — and they're <strong>asymmetric across providers</strong> (AWS/OCI match on <code>uid_ems</code>,
+    Azure on <code>ems_ref</code>). Some rows are cost-only (a managed service with no VM), some are inventory-only
+    (no cost row yet). We <strong>surface the residual rows rather than silently dropping them</strong> — the join
+    distribution on the Overview shows exactly what matched and what didn't.</p></div>
+  </details>
+  <details class="faq-q"><summary>Where does the on-prem cost come from?</summary>
+    <div class="faq-a"><p>FOCUS doesn't source on-prem data. The on-prem half is a <strong>per-resource recharge model</strong>
+    (a vCPU rate + a memory-GB rate per month) applied to ManageIQ inventory. The rates here are
+    <strong>illustrative stubs</strong> — ENBD's chargeback owner substitutes the real numbers. It's labelled
+    "estimated" wherever it appears.</p></div>
+  </details>
+  <details class="faq-q"><summary>Can I trust the per-workload costs?</summary>
+    <div class="faq-a"><p>Within the synthetic dataset, yes — they reconcile. Each workload's cost comes from the
+    pre-summed, USD-normalised join record, and the same figure appears on the Overview, the Utilization view, the
+    drill-down, and the AI answers. If two screens ever disagree, that's a bug we'd want to know about — they're built
+    to agree.</p></div>
+  </details>
+  <details class="faq-q"><summary>Why is "cost by business unit" mostly untagged?</summary>
+    <div class="faq-a"><p>Business unit isn't a FOCUS column — it lives in resource <strong>tags</strong>
+    (<code>cost-center</code>), and tagging is incomplete in this synthetic set (~38%). The console shows the tagged
+    breakdown <em>and</em> the untagged remainder rather than hiding the gap. In production, tag-coverage discipline is
+    exactly the kind of thing this surfaces.</p></div>
+  </details>
+</div>
+
+<div class="section-label"><span class="num">03.</span>The AI assistant</div>
+<div class="faq-group">
+  <details class="faq-q"><summary>How does "Ask the data" work — and can it give a wrong number?</summary>
+    <div class="faq-a"><p>You ask in plain language; the model writes a read-only SQL query, which is
+    <strong>parsed by an allowlist guard</strong> (single SELECT against four tables, nothing else) before it runs. The
+    answer is then built <strong>deterministically from the rows the query returned</strong> — not narrated freehand —
+    so it can't state a figure the data doesn't contain. Every answer shows the exact SQL it ran. The optional
+    "Interpret &amp; recommend" layer adds prose, but it too is bounded to those returned rows and will refuse to invent
+    a number that isn't there.</p></div>
+  </details>
+  <details class="faq-q"><summary>What model is it, and where does my question go?</summary>
+    <div class="faq-a"><p>Amazon Bedrock, Claude Sonnet, via the <strong>us-east-1</strong> cross-region inference profile.
+    For this synthetic demo the question text leaves the Gulf to a US commercial region — acceptable because the data is
+    fake. For real ENBD data this is a <strong>residency decision for legal</strong> (me-central-1 has no on-demand
+    Claude today; the alternative is the global inference profile). The console works fully with the AI turned off — the
+    canned queries never touch Bedrock.</p></div>
+  </details>
+  <details class="faq-q"><summary>What happens if the AI is unavailable?</summary>
+    <div class="faq-a"><p>It fails closed and says so plainly. The canned queries still run (they're plain SQL), and every
+    deterministic answer stands on its own. We'd rather show "AI off · canned only" than a confident wrong answer — for a
+    bank, a wrong-cost-with-confident-narration is the worst outcome, so the whole layer is built to avoid it.</p></div>
+  </details>
+</div>
+
+<div class="section-label"><span class="num">04.</span>Carbon, scope &amp; what's next</div>
+<div class="faq-group">
+  <details class="faq-q"><summary>Why is carbon a "roadmap" and not a number?</summary>
+    <div class="faq-a"><p>FOCUS has <strong>no carbon, emissions, or energy column</strong> through v1.4. A carbon figure derived
+    from cost alone would be confidently wrong. Real attribution needs per-provider feeds (AWS CCFT, Azure Emissions
+    Impact Dashboard) that are account- or subscription-level and monthly — plus a custom on-prem model. The Carbon view
+    shows the four data streams and their honest status, not a fabricated tonnage.</p></div>
+  </details>
+  <details class="faq-q"><summary>Is this production-ready?</summary>
+    <div class="faq-a"><p>No — it's a de-risking spike. It runs as a one-command Docker stack and is portable to AWS or
+    on-prem. The production architecture (ROSA/OpenShift + Aurora, connector framework, Secrets Manager) is designed and
+    documented, not deployed. The real deliverable is the captured set of gotchas so ENBD's team builds the real thing
+    faster.</p></div>
+  </details>
+  <details class="faq-q"><summary>How would ENBD connect a real cloud account?</summary>
+    <div class="faq-a"><p>Via the <strong>Connect</strong> page — onboarding a source is a registry entry plus a credential
+    reference, never a code change. In this PoC a registered source reads a synthetic export; in production the same
+    adapter reads the provider's real FOCUS export from S3/blob using a Secrets Manager credential. The dispatcher
+    normalises it and the join runs automatically.</p></div>
+  </details>
+  <details class="faq-q"><summary>How do I report something that looks wrong?</summary>
+    <div class="faq-a"><p>Note the page and the figure and raise it with the AWS engagement team. Because the data is
+    synthetic, "looks wrong" usually means either a deliberate honest-gap we're highlighting (an unmatched row, an
+    untagged cost) or a genuine bug — both are useful feedback for the sprint.</p></div>
+  </details>
+</div>
+
+{% endblock %}
