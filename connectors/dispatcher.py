@@ -30,13 +30,29 @@ FOCUS_CSV = os.path.join(OUT_DIR, "focus_combined.csv")
 REPORT_JSON = os.path.join(OUT_DIR, "validation_report.json")
 
 
-def run() -> dict:
+def run(only_source_id: str | None = None, out_csv: str | None = None) -> dict:
+    """Dispatch registered sources to FOCUS rows.
+
+    only_source_id: if given, process ONLY that source (incremental upload path,
+      W-15) — its rows are written to a per-source CSV so the combined file and
+      other sources' partitions are untouched. The returned dict carries
+      `out_csv` (the path written) so the caller can do a per-source DB load.
+    out_csv: override the output path (defaults to the combined CSV, or a
+      per-source file when only_source_id is set).
+    """
     sources = [s for s in registry.load() if s.enabled]
+    if only_source_id is not None:
+        sources = [s for s in sources if s.source_id == only_source_id]
     all_rows: list[dict] = []
     all_report: list[dict] = []
     summary: list[dict] = []
 
-    print(f"[dispatch] {len(sources)} enabled source(s) in registry")
+    target_csv = out_csv or (
+        os.path.join(OUT_DIR, f"focus_source_{only_source_id}.csv")
+        if only_source_id is not None else FOCUS_CSV)
+
+    print(f"[dispatch] {len(sources)} enabled source(s)"
+          + (f" (only {only_source_id})" if only_source_id else " in registry"))
     for cfg in sources:
         adapter = ADAPTERS.get(cfg.source_type)
         if adapter is None:
@@ -70,13 +86,14 @@ def run() -> dict:
               f"-> {src_rows} FOCUS rows")
         summary.append({"source_id": cfg.source_id, "status": "ok", "rows": src_rows})
 
-    # Write the combined FOCUS CSV — identical shape to the PoC normalizer
-    # output, so db/loader.py consumes it unchanged.
+    # Write the FOCUS CSV — identical shape to the PoC normalizer output, so
+    # db/loader.py consumes it unchanged. `_source_id` is now persisted so the
+    # loader can do per-source partition replace (W-15).
     os.makedirs(OUT_DIR, exist_ok=True)
     # Carry _extensions (provider x_ columns folded to JSON by the native
     # adapter, H-9) through to the loader.
-    columns = ["_source"] + focus_spec.FOCUS_COLUMNS_V1_3 + ["_extensions"]
-    with open(FOCUS_CSV, "w", newline="") as f:
+    columns = ["_source", "_source_id"] + focus_spec.FOCUS_COLUMNS_V1_3 + ["_extensions"]
+    with open(target_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         w.writeheader()
         for r in all_rows:
@@ -87,13 +104,13 @@ def run() -> dict:
     distinct = sorted({r.get("ServiceCategory", "") for r in all_rows})
     invalid = [c for c in distinct if c and c not in focus_spec.SERVICE_CATEGORIES_V1_3]
 
-    print(f"[dispatch] wrote {len(all_rows)} FOCUS rows -> {FOCUS_CSV}")
+    print(f"[dispatch] wrote {len(all_rows)} FOCUS rows -> {target_csv}")
     print(f"[dispatch] distinct ServiceCategory: {distinct}")
     if invalid:
         print(f"[dispatch] !!! non-conformant categories: {invalid}")
 
     return {"sources": summary, "focus_rows": len(all_rows),
-            "nonconformant_categories": invalid}
+            "nonconformant_categories": invalid, "out_csv": target_csv}
 
 
 if __name__ == "__main__":

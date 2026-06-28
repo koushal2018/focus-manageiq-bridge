@@ -27,7 +27,7 @@ This spec is **Spec 1 of a sequence**. It is the ingestion spine. Decomposition:
 | **1 (this)** | Config-driven **upload** ingestion + realistic synthetic data + connector SDK contract | **active** |
 | 2 | Live ManageIQ REST collector (replaces `join/miq_snapshot.py`) | deferred |
 | 3 | "Deploy your own" packaging (clone → configure → deploy a customer instance) | deferred |
-| 4 | Production hardening: real app auth, observability, CI/CD to ROSA+Aurora, **async incremental ingestion** (replace the in-request TRUNCATE+reload with an enqueued upsert job via the H-6 idempotency key — see GOTCHAS W-15) | deferred |
+| 4 | Production hardening: real app auth, observability, CI/CD to ROSA+Aurora. (Incremental per-source ingestion is DONE — W-15 resolved; what remains for Spec 4 is making it *async* + a per-source lock + streaming upload.) | deferred |
 | — | API-pull connectors (`AwsCostExplorerSource` etc.) as working impls | deferred (contract defined here) |
 
 ## 1. Scope & goal

@@ -52,6 +52,7 @@ def _conn_kwargs() -> dict:
 # FOCUS display name -> focus_costs column.
 FOCUS_CSV_TO_DB_COLUMN = {
     "_source": "source",
+    "_source_id": "source_id",
     "BillingAccountId": "billing_account_id",
     "BillingAccountName": "billing_account_name",
     "BillingPeriodStart": "billing_period_start",
@@ -136,16 +137,17 @@ def _idempotency_key(row: dict) -> str:
     return hashlib.sha256(basis.encode()).hexdigest()
 
 
-def _build_focus_staging() -> tuple[io.StringIO, list[str]]:
-    """Transform focus_combined.csv into a COPY-ready buffer with derived
-    columns (H-1 currency, H-8 utc, H-9 extensions, H-6 idempotency)."""
+def _build_focus_staging(csv_path: str = FOCUS_CSV) -> tuple[io.StringIO, list[str]]:
+    """Transform a FOCUS CSV into a COPY-ready buffer with derived columns
+    (H-1 currency, H-8 utc, H-9 extensions, H-6 idempotency). Defaults to the
+    combined CSV (bulk seed); a per-source CSV is passed for incremental load."""
     from generators.common import FX_TO_USD
 
     derived = ["billed_cost_usd", "fx_rate_to_usd", "extensions", "idempotency_key"]
     ts_cols = {"charge_period_start", "charge_period_end"}
     buf = io.StringIO()
 
-    with open(FOCUS_CSV) as f:
+    with open(csv_path) as f:
         reader = csv.DictReader(f)
         db_cols = [FOCUS_CSV_TO_DB_COLUMN[c] for c in reader.fieldnames if c in FOCUS_CSV_TO_DB_COLUMN]
         all_cols = db_cols + derived
@@ -340,6 +342,98 @@ def main() -> None:
     print(f"[loader] resource_join_map: {n_join} rows")
     print(f"[loader] miq_utilization: {n_util} rows")
     print(f"[loader] committed in {(finished - started).total_seconds():.2f}s")
+
+
+def load_source(source_id: str, csv_path: str) -> int:
+    """Incremental, per-source load (W-15): replace ONLY this source's partition
+    of focus_costs — DELETE WHERE source_id=%s, then COPY the new rows — inside
+    ONE transaction, guarded by the same in-txn conformance gate as the bulk
+    load. The rest of the warehouse (other sources) is untouched; there is NO
+    global TRUNCATE, so the load cost is O(this source), not O(all history).
+
+    Returns the number of focus_costs rows loaded for the source. Raises
+    LoadConformanceError (→ rollback, partition preserved) if the staged rows
+    would be non-conformant.
+
+    NOTE: this loads focus_costs only. resource_join_map is a DERIVED view over
+    ALL cost rows, so the caller rebuilds it from the full table afterward
+    (see connectors.router._load_and_join). Keeping the join rebuild separate
+    is deliberate: the join must see every source, not just the changed one."""
+    started = dt.datetime.now(dt.timezone.utc)
+    focus_buf, focus_cols = _build_focus_staging(csv_path)
+
+    conn = psycopg2.connect(**_conn_kwargs())
+    try:
+        conn.autocommit = False                       # one transaction (H-4)
+        with conn.cursor() as cur:
+            # Replace just this source's partition.
+            cur.execute("DELETE FROM focus_costs WHERE source_id = %s", (source_id,))
+            deleted = cur.rowcount
+            n_focus = _copy(cur, "focus_costs", focus_cols, focus_buf)
+            # Gate the WHOLE table (the partition we just wrote could only have
+            # made it non-conformant; checking all rows is cheap and strict).
+            _assert_conformant_in_txn(cur)
+            finished = dt.datetime.now(dt.timezone.utc)
+            cur.execute(
+                "INSERT INTO load_metadata "
+                "(started_at, finished_at, focus_rows_loaded, join_rows_loaded, "
+                " miq_util_rows_loaded, miq_onprem_rows_loaded, notes) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (started, finished, n_focus, 0, 0, 0,
+                 f"incremental load source_id={source_id} (-{deleted}/+{n_focus})"),
+            )
+        conn.commit()
+    except LoadConformanceError as e:
+        conn.rollback()
+        print(f"[loader] ROLLBACK — source {source_id!r} staged data non-conformant: {e}")
+        print(f"[loader] source {source_id!r} partition preserved; nothing changed.")
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    print(f"[loader] incremental: source {source_id!r} -{deleted}/+{n_focus} "
+          f"focus_costs rows in {(finished - started).total_seconds():.2f}s")
+    return n_focus
+
+
+def export_focus_costs_csv(path: str) -> int:
+    """Dump the full focus_costs table back to the dispatcher's combined-CSV
+    shape so the join (a derived view over ALL rows) can rebuild after an
+    incremental load. Returns row count. Columns mirror the dispatcher output
+    (`_source`, `_source_id`, FOCUS display columns, `_extensions`).
+
+    Only the columns the JOIN reads must be faithful — it keys on `_source`,
+    `ResourceId`, `BillingCurrency`, `BilledCost`, `ServiceCategory` (see
+    join/resource_join_map.build). We emit the full FOCUS column set anyway so
+    the CSV round-trips cleanly."""
+    import csv as _csv
+    import json as _json
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from normalizer import focus_spec
+    from web import db as _db
+
+    cols = ["_source", "_source_id"] + focus_spec.FOCUS_COLUMNS_V1_3 + ["_extensions"]
+    rows = _db.query("SELECT * FROM focus_costs ORDER BY row_id")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", newline="") as f:
+        w = _csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for r in rows:
+            out = {}
+            for focus_col in cols:
+                if focus_col == "_extensions":
+                    v = r.get("extensions")          # JSONB column
+                else:
+                    db_col = FOCUS_CSV_TO_DB_COLUMN.get(focus_col)
+                    v = r.get(db_col) if db_col else ""
+                if isinstance(v, (dict, list)):       # Tags / extensions JSONB
+                    v = _json.dumps(v, separators=(",", ":"))
+                out[focus_col] = "" if v is None else v
+            w.writerow(out)
+    return len(rows)
 
 
 if __name__ == "__main__":

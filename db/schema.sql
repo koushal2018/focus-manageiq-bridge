@@ -36,6 +36,11 @@ DROP TABLE IF EXISTS load_metadata     CASCADE;
 CREATE TABLE focus_costs (
     row_id              BIGSERIAL PRIMARY KEY,
     source              TEXT NOT NULL,                     -- 'aws' | 'azure' | 'oci' (private debug field)
+    -- The REGISTRY source instance this row came from (dispatcher's cfg.source_id).
+    -- Enables per-source incremental load (DELETE WHERE source_id=X; INSERT) so
+    -- an upload replaces only its own partition instead of TRUNCATEing the whole
+    -- warehouse (GOTCHA W-15). Nullable for rows loaded by the bulk seed path.
+    source_id           TEXT,
 
     -- Account / period
     billing_account_id      TEXT,                          -- BillingAccountId
@@ -115,6 +120,7 @@ CREATE INDEX idx_focus_costs_resource_id        ON focus_costs(resource_id);
 CREATE INDEX idx_focus_costs_service_category   ON focus_costs(service_category);
 CREATE INDEX idx_focus_costs_billing_period     ON focus_costs(billing_period_start);
 CREATE INDEX idx_focus_costs_source             ON focus_costs(source);
+CREATE INDEX idx_focus_costs_source_id          ON focus_costs(source_id);
 CREATE INDEX idx_focus_costs_sku_meter          ON focus_costs(sku_meter);
 -- Bedrock model rollups need fast filter+group on (service_category, sku_meter)
 CREATE INDEX idx_focus_costs_ai                 ON focus_costs(service_category, sku_meter)

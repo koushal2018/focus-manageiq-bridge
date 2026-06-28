@@ -31,7 +31,7 @@ def test_upload_accepts_focus(tmp_path, monkeypatch):
     from connectors import adapters
     monkeypatch.setattr(adapters, "UPLOAD_ROOT", str(tmp_path))
     # Stub the load pipeline so it doesn't touch the real DB
-    monkeypatch.setattr("connectors.router._load_and_join", lambda: None)
+    monkeypatch.setattr("connectors.router._ingest_upload", lambda sid: {"focus_rows": 1, "out_csv": "x", "sources": [], "nonconformant_categories": []})
     # Isolate the registry so it doesn't write the shared sources.json
     monkeypatch.setattr("connectors.registry.REGISTRY_PATH", str(tmp_path / "sources.json"))
     good = io.BytesIO((HEADER + _ROW).encode())
@@ -47,7 +47,7 @@ def test_upload_rejects_traversal_source_id(tmp_path, monkeypatch):
     # BEFORE any file is written — it would otherwise escape the inbox dir.
     from connectors import adapters
     monkeypatch.setattr(adapters, "UPLOAD_ROOT", str(tmp_path))
-    monkeypatch.setattr("connectors.router._load_and_join", lambda: None)
+    monkeypatch.setattr("connectors.router._ingest_upload", lambda sid: {"focus_rows": 1, "out_csv": "x", "sources": [], "nonconformant_categories": []})
     monkeypatch.setattr("connectors.registry.REGISTRY_PATH", str(tmp_path / "sources.json"))
     good = io.BytesIO((HEADER + _ROW).encode())
     r = client.post("/connect/upload",
@@ -64,7 +64,7 @@ def test_upload_rejects_oversize(tmp_path, monkeypatch):
     # The synchronous path caps upload size to protect the worker (W-15).
     from connectors import adapters, router
     monkeypatch.setattr(adapters, "UPLOAD_ROOT", str(tmp_path))
-    monkeypatch.setattr("connectors.router._load_and_join", lambda: None)
+    monkeypatch.setattr("connectors.router._ingest_upload", lambda sid: {"focus_rows": 1, "out_csv": "x", "sources": [], "nonconformant_categories": []})
     monkeypatch.setattr("connectors.registry.REGISTRY_PATH", str(tmp_path / "sources.json"))
     monkeypatch.setattr(router, "_MAX_UPLOAD_BYTES", 1024)  # tiny cap for the test
     big = io.BytesIO((HEADER + _ROW * 5000).encode())  # > 1 KiB

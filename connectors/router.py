@@ -52,31 +52,65 @@ def _valid_source_id(sid: str) -> bool:
     return bool(_SAFE_SOURCE_ID.match(sid))
 
 
-def _load_and_join() -> None:
-    """Run the join + DB load + onprem steps after a dispatch so uploaded data
-    actually reaches focus_costs (and the dashboard), mirroring docker/seed.py
-    steps 4-6. The MIQ snapshot is produced at seed time; if it is missing
-    (fresh container that never seeded) we regenerate it so the join can run."""
-    import os
+def _rebuild_join_and_onprem(root: str) -> None:
+    """Rebuild the DERIVED resource_join_map from the FULL focus_costs table
+    (the join must see every source, not just the one just loaded) and refresh
+    onprem. focus_costs is dumped back to the combined-CSV shape so the existing
+    file-based join builder runs unchanged over all rows."""
     from join import miq_snapshot, resource_join_map
     from db import loader
 
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     vms_path = os.path.join(root, "out", "miq", "vms.json")
     if not os.path.exists(vms_path):
         vms_path, _ = miq_snapshot.write_snapshots()
     os.environ.setdefault("MIQ_VMS_JSON", vms_path)
 
+    # Export the FULL table → combined CSV → rebuild join over all sources.
     combined = os.path.join(root, "out", "normalizer", "focus_combined.csv")
+    loader.export_focus_costs_csv(combined)
     rows = resource_join_map.build(combined)
     resource_join_map.write_csv(
         rows, os.path.join(root, "out", "join", "resource_join_map.csv"))
-    loader.main()
+    _load_join_only(rows)
     try:
         from onprem import cost_model
         cost_model.load_into_postgres()
     except Exception as e:  # onprem is supplementary; never fail the upload on it
         print(f"[upload] onprem load skipped: {e}")
+
+
+def _load_join_only(join_rows) -> None:
+    """Replace resource_join_map (derived) in its own transaction. Separate from
+    focus_costs so the incremental cost partition-replace stays O(one source)."""
+    import psycopg2
+    from db import loader as _loader
+    join_buf, join_cols = _loader._build_join_staging()
+    conn = psycopg2.connect(**_loader._conn_kwargs())
+    try:
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE resource_join_map RESTART IDENTITY")
+            _loader._copy(cur, "resource_join_map", join_cols, join_buf)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _ingest_upload(source_id: str) -> dict:
+    """Incremental ingest of one uploaded source (W-15): dispatch ONLY this
+    source → per-source partition load of focus_costs (no global TRUNCATE) →
+    rebuild the derived join over all sources. Returns the dispatch result."""
+    import os
+    from db import loader
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    result = dispatcher.run(only_source_id=source_id)
+    loader.load_source(source_id, result["out_csv"])   # may raise LoadConformanceError
+    _rebuild_join_and_onprem(root)
+    return result
 
 
 # The synthetic exports a PoC user can point a new source at. In production
@@ -214,14 +248,15 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
     with open(dest, "wb") as f:
         f.write(raw)
 
-    # The load is a destructive TRUNCATE+reload guarded by a pre-commit
-    # conformance check (db/loader.py): if this upload's rows would make the
-    # warehouse non-conformant, the whole load ROLLS BACK and the existing data
-    # is preserved. In that case the file we just wrote is poison — remove it so
-    # it isn't re-ingested on the next dispatch, and surface the error.
-    result = dispatcher.run()
+    # Incremental, per-source ingest (W-15): only THIS source is dispatched and
+    # only its partition of focus_costs is replaced — no global TRUNCATE, cost
+    # is O(this source) not O(all history). The per-source load is guarded by an
+    # in-txn conformance gate; if this upload's rows would be non-conformant the
+    # partition load ROLLS BACK and every other source is untouched. In that
+    # case the file we just wrote is poison — remove it so it isn't re-ingested,
+    # and surface the error.
     try:
-        _load_and_join()
+        result = _ingest_upload(sid)
     except Exception as e:
         try:
             os.remove(dest)
@@ -229,7 +264,7 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
             pass
         return JSONResponse(
             {"ok": False, "error": f"upload rejected at load: {e}. The existing "
-             "data was preserved; nothing was changed.", "dispatch": result},
+             "data was preserved; nothing was changed."},
             status_code=422)
     UploadSource().advance_watermark(
         SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"))
