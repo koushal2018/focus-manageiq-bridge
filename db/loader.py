@@ -161,6 +161,16 @@ def _build_focus_staging() -> tuple[io.StringIO, list[str]]:
                     v = _to_utc_iso(v)        # H-8
                 out[db_col] = v
 
+            # Tags must be valid JSON to land in the JSONB column. Real exports
+            # carry malformed tag strings (messy-data reality); coerce an
+            # unparseable value to NULL rather than aborting the whole COPY.
+            tg = out.get("tags")
+            if tg:
+                try:
+                    json.loads(tg)
+                except (ValueError, TypeError):
+                    out["tags"] = ""   # FORCE_NULL -> SQL NULL
+
             # H-1 currency normalization → USD
             ccy = (row.get("BillingCurrency") or "").upper()
             rate = FX_TO_USD.get(ccy)
