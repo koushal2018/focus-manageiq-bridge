@@ -14,6 +14,7 @@ isn't is exactly the failure mode SPEC §0 warns against, so we label it.
 from __future__ import annotations
 
 import os
+import re
 
 from fastapi import APIRouter, Request, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -29,6 +30,26 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(THIS_DIR), "web", "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 router = APIRouter(prefix="/connect", tags=["connect"])
+
+# source_id is used UNSANITIZED as a filesystem path component (inbox_dir joins
+# it under out/uploads/). A value like "../../etc" would escape the inbox — a
+# path-traversal write primitive on an endpoint with no real auth. Constrain it
+# to a safe charset and reject traversal explicitly. (GOTCHA SEC-1.)
+_SAFE_SOURCE_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+# Cap the in-request upload so one POST can't OOM the worker (the container is
+# memory-limited). Real exports for a large org are far bigger than this — that
+# is the async-ingestion story (deferred, GOTCHA W-15); this cap keeps the
+# synchronous demo path honest about its limits rather than crashing.
+_MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MiB
+
+
+def _valid_source_id(sid: str) -> bool:
+    """A source_id must be a single safe path segment — no separators, no
+    traversal, no absolute paths. Mirrors the _SAFE_SOURCE_ID charset."""
+    if not sid or sid in (".", "..") or "/" in sid or "\\" in sid:
+        return False
+    return bool(_SAFE_SOURCE_ID.match(sid))
 
 
 def _load_and_join() -> None:
@@ -152,8 +173,26 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
     sid = (source_id or "").strip()
     if not sid:
         return JSONResponse({"ok": False, "error": "source_id is required"}, status_code=400)
+    if not _valid_source_id(sid):
+        return JSONResponse(
+            {"ok": False, "error": "source_id must be 1–128 chars of letters, "
+             "digits, dot, underscore or hyphen (no path separators)"},
+            status_code=400)
 
-    raw = await file.read()
+    # Bounded read: stream in chunks and abort if it exceeds the cap, so a
+    # large (or hostile) upload can't OOM the worker before validation.
+    raw = b""
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        raw += chunk
+        if len(raw) > _MAX_UPLOAD_BYTES:
+            return JSONResponse(
+                {"ok": False, "error": f"file exceeds the {_MAX_UPLOAD_BYTES // (1024*1024)} MiB "
+                 "synchronous-upload limit (large exports need the async path)"},
+                status_code=413)
+
     ok, reason = upload_validate.validate_focus_csv(raw)
     if not ok:
         return JSONResponse({"ok": False, "error": reason}, status_code=400)
@@ -175,8 +214,23 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
     with open(dest, "wb") as f:
         f.write(raw)
 
+    # The load is a destructive TRUNCATE+reload guarded by a pre-commit
+    # conformance check (db/loader.py): if this upload's rows would make the
+    # warehouse non-conformant, the whole load ROLLS BACK and the existing data
+    # is preserved. In that case the file we just wrote is poison — remove it so
+    # it isn't re-ingested on the next dispatch, and surface the error.
     result = dispatcher.run()
-    _load_and_join()
+    try:
+        _load_and_join()
+    except Exception as e:
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        return JSONResponse(
+            {"ok": False, "error": f"upload rejected at load: {e}. The existing "
+             "data was preserved; nothing was changed.", "dispatch": result},
+            status_code=422)
     UploadSource().advance_watermark(
         SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}

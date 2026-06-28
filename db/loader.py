@@ -245,6 +245,51 @@ def _copy(cur, table: str, cols: list[str], buf: io.StringIO,
     return cur.rowcount
 
 
+# Pre-commit load gate (mirrors web.queries._FOCUS_MANDATORY_NONNULL and the
+# ServiceCategory/USD rules). Because the load TRUNCATEs first, committing a
+# non-conformant batch would REPLACE a good warehouse with a broken one. We
+# check conformance INSIDE the transaction, before commit, and raise on
+# failure so the TRUNCATE rolls back and the prior data is preserved. Keep this
+# list in lockstep with web.queries and connectors.upload_validate. (GOTCHA W-16.)
+_LOAD_MANDATORY_NONNULL = [
+    "service_category", "service_provider_name", "billing_currency",
+    "charge_period_start", "charge_period_end", "billed_cost",
+]
+
+
+class LoadConformanceError(Exception):
+    """Raised inside the load txn when the staged data would be non-conformant,
+    so the TRUNCATE rolls back and the existing warehouse survives."""
+
+
+def _assert_conformant_in_txn(cur) -> None:
+    """Run the conformance rules against the just-COPYed (uncommitted) rows.
+    Any failure raises LoadConformanceError → caller rolls back."""
+    problems: list[str] = []
+    for col in _LOAD_MANDATORY_NONNULL:
+        cur.execute(f"SELECT COUNT(*) FROM focus_costs WHERE {col} IS NULL")
+        n = cur.fetchone()[0]
+        if n:
+            problems.append(f"{n} row(s) with NULL {col}")
+    # ServiceCategory closed set
+    from normalizer.focus_spec import SERVICE_CATEGORIES_V1_3
+    cur.execute(
+        "SELECT COUNT(*) FROM focus_costs "
+        "WHERE service_category IS NOT NULL AND NOT (service_category = ANY(%s))",
+        (list(SERVICE_CATEGORIES_V1_3),))
+    n = cur.fetchone()[0]
+    if n:
+        problems.append(f"{n} row(s) with out-of-set ServiceCategory")
+    # USD normalization present on every billable row (H-1)
+    cur.execute("SELECT COUNT(*) FROM focus_costs "
+                "WHERE billed_cost IS NOT NULL AND billed_cost_usd IS NULL")
+    n = cur.fetchone()[0]
+    if n:
+        problems.append(f"{n} billable row(s) missing billed_cost_usd")
+    if problems:
+        raise LoadConformanceError("; ".join(problems))
+
+
 def main() -> None:
     started = dt.datetime.now(dt.timezone.utc)
     print(f"[loader] start at {started.isoformat()} (psycopg2, single txn)")
@@ -266,6 +311,10 @@ def main() -> None:
             # util has no nullable empties to force; keep FORCE_NULL off
             n_util = _copy(cur, "miq_utilization", util_cols, util_buf, force_null=False)
 
+            # Pre-commit gate: if the staged rows are non-conformant, raise so
+            # the TRUNCATE rolls back and the old (good) data is preserved.
+            _assert_conformant_in_txn(cur)
+
             finished = dt.datetime.now(dt.timezone.utc)
             cur.execute(
                 "INSERT INTO load_metadata "
@@ -276,6 +325,11 @@ def main() -> None:
                  "psycopg2 single-txn load; onprem loaded separately"),
             )
         conn.commit()                    # H-4: all-or-nothing
+    except LoadConformanceError as e:
+        conn.rollback()
+        print(f"[loader] ROLLBACK — staged data non-conformant: {e}")
+        print("[loader] existing warehouse preserved; nothing changed.")
+        raise
     except Exception:
         conn.rollback()
         raise
