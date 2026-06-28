@@ -250,7 +250,7 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
                 "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
                 "ChargeCategory": "Usage", "ChargeDescription": f"Azure OpenAI {meter}",
                 "BilledCost": common.usd_to_aed(usd_j), "EffectiveCost": common.usd_to_aed(usd_j),
-                "ListCost": usd_j, "ContractedCost": common.usd_to_aed(usd_j),
+                "ListCost": common.usd_to_aed(usd_j), "ContractedCost": common.usd_to_aed(usd_j),
                 "BillingCurrency": "AED", "PricingCurrency": "USD",
                 "ServiceProviderName": "Microsoft", "InvoiceIssuerName": "Microsoft",
                 "ServiceCategory": "AI and Machine Learning", "ServiceName": "Azure OpenAI Service",

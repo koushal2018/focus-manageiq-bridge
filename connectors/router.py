@@ -31,6 +31,33 @@ templates = Jinja2Templates(directory=TEMPLATE_DIR)
 router = APIRouter(prefix="/connect", tags=["connect"])
 
 
+def _load_and_join() -> None:
+    """Run the join + DB load + onprem steps after a dispatch so uploaded data
+    actually reaches focus_costs (and the dashboard), mirroring docker/seed.py
+    steps 4-6. The MIQ snapshot is produced at seed time; if it is missing
+    (fresh container that never seeded) we regenerate it so the join can run."""
+    import os
+    from join import miq_snapshot, resource_join_map
+    from db import loader
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    vms_path = os.path.join(root, "out", "miq", "vms.json")
+    if not os.path.exists(vms_path):
+        vms_path, _ = miq_snapshot.write_snapshots()
+    os.environ.setdefault("MIQ_VMS_JSON", vms_path)
+
+    combined = os.path.join(root, "out", "normalizer", "focus_combined.csv")
+    rows = resource_join_map.build(combined)
+    resource_join_map.write_csv(
+        rows, os.path.join(root, "out", "join", "resource_join_map.csv"))
+    loader.main()
+    try:
+        from onprem import cost_model
+        cost_model.load_into_postgres()
+    except Exception as e:  # onprem is supplementary; never fail the upload on it
+        print(f"[upload] onprem load skipped: {e}")
+
+
 # The synthetic exports a PoC user can point a new source at. In production
 # this list disappears — the location is an S3 prefix / blob URL the admin
 # types, and discover() lists real objects.
@@ -141,11 +168,15 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
 
     # Write the validated bytes into the inbox.
     d = inbox_dir(sid)
-    dest = os.path.join(d, os.path.basename(file.filename or "upload.csv"))
+    basename = os.path.basename(file.filename or "upload.csv")
+    if not basename.lower().endswith(".csv"):
+        basename += ".csv"
+    dest = os.path.join(d, basename)
     with open(dest, "wb") as f:
         f.write(raw)
 
     result = dispatcher.run()
+    _load_and_join()
     UploadSource().advance_watermark(
         SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}
