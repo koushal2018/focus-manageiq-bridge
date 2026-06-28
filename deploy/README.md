@@ -38,12 +38,28 @@ deploy/
 4. **ROSA** — provision via `rosa create cluster` (see `rosa.tf` comments;
    ROSA is typically created with the `rosa` CLI / OCM, not pure Terraform).
    Or use the Red Hat `rhcs` Terraform provider if ENBD standardizes on it.
-5. **Image** — build + push the web image to the ECR repo (`make push` or a
-   pipeline). Same `Dockerfile` as the PoC.
+5. **Image** — build + push the web image to the ECR repo. The
+   `.github/workflows/image.yml` pipeline does this on a `v*` tag (or manual
+   dispatch) via GitHub OIDC — set repo variables `AWS_ROLE_ARN`, `AWS_REGION`,
+   `ECR_REPOSITORY` (the job skips cleanly if `AWS_ROLE_ARN` is unset, so a
+   fork without AWS wiring doesn't fail). Same `Dockerfile` as the PoC. The
+   pipeline stops at push — it does NOT deploy (the CI runner has no cluster
+   access; rollout is step 6 from a credentialed session, CX-4).
 6. **App** — `helm upgrade --install finops openshift/helm/finops`
-   with values pointing at the RDS endpoint + the Secrets Manager ARN.
+   with values pointing at the RDS endpoint + the Secrets Manager ARN. The
+   chart now also wires (all optional, blank = off):
+   - `tenant.orgName/productName/reportingCurrency` — rebrand a deploy without
+     rebuilding the image (env overrides `config/tenant.json`, PKG-1).
+   - `basicAuth.enabled` + a `finops-basic-auth` Secret — app-layer auth on the
+     destructive console (CX-6), defence-in-depth behind the Route.
+   - `miq.url` + a `finops-miq` Secret — switch the seed/dispatch from the
+     synthesized snapshot to the LIVE ManageIQ collector (MIQ-1); CA via
+     `miq.caBundlePath` (G-6, never verify=False).
+   - `metrics.enabled` — Prometheus scrape annotations on the pod (OBS-1);
+     `/metrics` is cluster-internal + unauthenticated by design.
 7. **SSO + Route** — wire the OpenShift Route to ENBD's IdP (OAuth proxy or
-   the platform's existing SSO integration).
+   the platform's existing SSO integration). The app-layer Basic Auth is a
+   fallback; SSO at the Route is the production front door.
 
 ## Non-negotiables carried from the PoC
 

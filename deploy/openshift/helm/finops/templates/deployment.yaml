@@ -10,6 +10,15 @@ spec:
   template:
     metadata:
       labels: {{- include "finops.selectorLabels" . | nindent 8 }}
+      {{- if .Values.metrics.enabled }}
+      annotations:
+        # Prometheus scrape (OBS-1). /metrics is unauthenticated by design but
+        # only reachable inside the cluster network; a ServiceMonitor is the
+        # cleaner option on OpenShift if the Prometheus Operator is present.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.metrics.port | quote }}
+        prometheus.io/path: {{ .Values.metrics.path | quote }}
+      {{- end }}
     spec:
       securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

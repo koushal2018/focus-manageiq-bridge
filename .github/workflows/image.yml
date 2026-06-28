@@ -1,0 +1,85 @@
+name: Build & push image
+
+# Builds the production web image and pushes it to ECR on a version tag
+# (v*) or manual dispatch. The actual cluster rollout (`helm upgrade`) is
+# deliberately NOT here — it runs from a credentialed ENBD session against the
+# private ROSA cluster (the PoC role has no eks/ecr/iam access, GOTCHAS
+# CX-4/CX-5). This workflow is the "build the artifact" half; the deploy half
+# is documented in deploy/README.md step 6.
+#
+# Gated on AWS_ROLE_ARN being configured as a repo variable — without it the
+# job is skipped, so a fork without AWS wiring doesn't fail CI. Auth is via
+# GitHub OIDC (no long-lived keys; G-1).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to push (defaults to the git sha)"
+        required: false
+
+permissions:
+  id-token: write   # OIDC federation to AWS
+  contents: read
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    # Skip cleanly if the deploy target isn't configured (fork / no AWS).
+    if: ${{ vars.AWS_ROLE_ARN != '' }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'finops-web' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        # Untrusted inputs (ref name, dispatch input) are passed via env, never
+        # interpolated into the script, and validated against a safe charset
+        # before use — workflow-injection hardening.
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            CANDIDATE="$REF_NAME"
+          elif [ -n "$INPUT_TAG" ]; then
+            CANDIDATE="$INPUT_TAG"
+          else
+            CANDIDATE="sha-${GIT_SHA:0:12}"
+          fi
+          # Docker tag charset only; reject anything else rather than pass it on.
+          if ! printf '%s' "$CANDIDATE" | grep -Eq '^[A-Za-z0-9._-]{1,128}$'; then
+            echo "::error::invalid image tag: $CANDIDATE"; exit 1
+          fi
+          echo "tag=$CANDIDATE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:$TAG"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "Pushed $IMAGE"
+          echo "## Image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy from a credentialed session (deploy/README.md step 6):" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`helm upgrade --install finops deploy/openshift/helm/finops --set image.repository=$REGISTRY/$ECR_REPOSITORY --set image.tag=$TAG ...\`" >> "$GITHUB_STEP_SUMMARY"

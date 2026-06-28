@@ -33,6 +33,37 @@ bedrock:
   region: "us-east-1"
   modelId: "us.anthropic.claude-sonnet-4-6"
 
+# Tenant branding/currency (PKG-1). config/tenant.json is baked into the image;
+# set these to rebrand a deploy WITHOUT rebuilding (env wins over the file).
+# Leave blank to use the image's config/tenant.json as-is.
+tenant:
+  orgName: ""             # e.g. "Emirates NBD"
+  productName: ""         # e.g. "CloudLens FinOps"
+  reportingCurrency: ""   # e.g. "USD" — FX rates stay in config/tenant.json
+
+# App-layer Basic Auth on the (destructive) console — defence-in-depth behind
+# the cluster Route / edge (CX-6). OFF unless enabled AND the secret exists.
+basicAuth:
+  enabled: false
+  secretName: "finops-basic-auth"
+  userKey: "user"
+  passKey: "pass"
+
+# Live ManageIQ collector (MIQ-1). Leave url blank to use the synthesized
+# snapshot (no appliance). Set url + a secret with creds to collect live.
+miq:
+  url: ""                 # e.g. https://miq.internal/api ; blank = snapshot
+  secretName: "finops-miq"
+  userKey: "user"
+  passKey: "pass"
+  caBundlePath: ""        # path to a mounted CA PEM (G-6; never verify=False)
+
+# Prometheus scrape (OBS-1). /metrics is unauthenticated but cluster-internal.
+metrics:
+  enabled: true
+  port: "8000"
+  path: "/metrics"
+
 # Seed runs once as a Job (Helm hook) before the Deployment serves, so the
 # DB is populated. In production the dispatcher runs on a schedule (a
 # CronJob) instead of seeding synthetic data — see templates/cronjob.yaml.
