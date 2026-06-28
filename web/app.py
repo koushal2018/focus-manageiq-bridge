@@ -20,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 
 from web import queries
 from web import observability as obs
+from web import tenant
 
 # Slice 7: optional Bedrock NL-query layer. Mounted as a router; works
 # (in canned-query-only mode) even when Bedrock is disabled.
@@ -35,15 +36,20 @@ STATIC_DIR = os.path.join(THIS_DIR, "static")
 
 
 app = FastAPI(
-    title="ENBD Multi-Cloud FinOps PoC",
+    title=f"{tenant.get('product_name')} — {tenant.get('org_name')}",
     description=(
-        "Throwaway de-risking spike for the ENBD engagement. "
-        "Read GOTCHAS.md before changing anything."
+        "Multi-cloud FinOps console (FOCUS + ManageIQ). Config-driven, "
+        "single-tenant per deploy. Read GOTCHAS.md before changing anything."
     ),
-    version="0.5.0",
+    version="0.6.0",
 )
 
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
+# Tenant branding is a Jinja GLOBAL (set once) rather than threaded through
+# every TemplateResponse — every template, including _base.html, can read
+# `tenant.org_name` etc. Config-driven single-tenant: a customer edits
+# config/tenant.json, no template edits. (Spec 3 packaging.)
+templates.env.globals["tenant"] = tenant.branding()
 if os.path.isdir(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -81,7 +87,7 @@ async def _basic_auth(request: Request, call_next):
     return Response(
         "Authentication required.",
         status_code=401,
-        headers={"WWW-Authenticate": 'Basic realm="ENBD FinOps PoC (synthetic)"'},
+        headers={"WWW-Authenticate": f'Basic realm="{tenant.get("product_name")} (synthetic)"'},
     )
 
 

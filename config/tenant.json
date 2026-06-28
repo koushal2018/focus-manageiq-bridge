@@ -1,0 +1,14 @@
+{
+  "org_name": "Emirates NBD",
+  "product_name": "CloudLens FinOps",
+  "user_label": "ENBD User",
+  "user_initials": "EU",
+  "environment_note": "synthetic data — no real ENBD data",
+  "reporting_currency": "USD",
+  "fx_to_reporting": {
+    "USD": 1.0,
+    "AED": 0.27228319,
+    "EUR": 1.08,
+    "GBP": 1.27
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy to config/tenant.json and edit. This is the ONLY file a new customer must change to rebrand + set their reporting currency. See connectors/README.md for adding data sources.",
+  "org_name": "Acme Bank",
+  "product_name": "CloudLens FinOps",
+  "user_label": "Acme FinOps",
+  "user_initials": "AF",
+  "environment_note": "synthetic data — replace with your own FOCUS exports via /connect",
+  "reporting_currency": "USD",
+  "fx_to_reporting": {
+    "USD": 1.0,
+    "AED": 0.27228319,
+    "EUR": 1.08,
+    "GBP": 1.27
+  }
+}

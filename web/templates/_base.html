@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}CloudLens FinOps — Emirates NBD{% endblock %}</title>
+<title>{% block title %}{{ tenant.product_name if tenant else "CloudLens FinOps" }} — {{ tenant.org_name if tenant else "FinOps" }}{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -247,7 +247,7 @@
   <aside class="sidebar">
     <a class="brand" href="/">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span><span class="brand-name">CloudLens</span><span class="brand-sub" style="display:block">FinOps · ENBD</span></span>
+      <span><span class="brand-name">{{ tenant.product_name.split()[0] if tenant else "CloudLens" }}</span><span class="brand-sub" style="display:block">FinOps · {{ tenant.org_name if tenant else "" }}</span></span>
     </a>
     <div class="nav-label">Workspace</div>
     <nav class="primary" aria-label="Primary">
@@ -257,7 +257,7 @@
     </nav>
     <div class="nav-foot">
       <span class="synthetic-tag">Synthetic data</span>
-      <div class="user"><span class="avatar">EU</span><span><span class="uname">ENBD User</span><span class="urole" style="display:block">FinOps · ENBD</span></span></div>
+      <div class="user"><span class="avatar">{{ tenant.user_initials if tenant else "DU" }}</span><span><span class="uname">{{ tenant.user_label if tenant else "Demo User" }}</span><span class="urole" style="display:block">FinOps · {{ tenant.org_name if tenant else "" }}</span></span></div>
     </div>
   </aside>
 
