@@ -210,8 +210,46 @@
   </div>
 </div>
 
+<!-- ─────────── FOCUS conformance ─────────── -->
+<div class="section-label"><span class="num">04.</span>FOCUS v1.3 conformance · validated, not just claimed</div>
+
+<div class="coverage" style="margin-bottom:18px">
+  <div class="cov-label"><strong>{{ conformance.rules_passed }}&nbsp;/&nbsp;{{ conformance.rules_total }}</strong> normative checks pass</div>
+  <div class="cov-bar" aria-label="conformance"><span style="width:{{ (conformance.rules_passed / conformance.rules_total * 100)|round(0,'floor') }}%; background:{{ 'var(--jade)' if conformance.conformant else 'var(--amber)' }}"></span></div>
+  <div class="cov-label">
+    {% if conformance.conformant %}<strong style="color:var(--jade)">Conformant</strong> · {{ "{:,}".format(conformance.total_rows) }} rows{% else %}<strong style="color:var(--amber)">{{ conformance.total_fail_rows }} row(s) flagged</strong> across {{ "{:,}".format(conformance.total_rows) }}{% endif %}
+  </div>
+</div>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th scope="col">Normative rule (FOCUS v1.3)</th>
+      <th scope="col">Kind</th>
+      <th scope="col" class="r">Failing rows</th>
+      <th scope="col" class="r">Verdict</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in conformance.checks %}
+    <tr>
+      <td>{{ c.rule }}{% if c.detail %}<span class="dim mono" style="display:block;font-size:10.5px;margin-top:3px">{{ c.detail }}</span>{% endif %}</td>
+      <td class="dim mono" style="font-size:11.5px">{{ c.kind }}</td>
+      <td class="r mono"{% if not c.ok %} style="color:var(--amber)"{% endif %}>{{ c.fail }}</td>
+      <td class="r">
+        {% if c.ok %}<span class="v-word v-native" style="font-size:11px"><span class="dot"></span>Pass</span>
+        {% else %}<span class="v-word v-flag" style="font-size:11px"><span class="dot"></span>Fail</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); margin-top: 10px;">
+  Allowed-value + mandatory-column rules checked against the FOCUS v1.3 spec. This is a <span style="color:var(--accent-deep)">validation</span>, not a label — the EBA team runs the same checks on real exports before any leadership review.
+</div>
+
 <!-- ─────────── Cloud vs on-prem ─────────── -->
-<div class="section-label"><span class="num">04.</span>Cloud vs on-prem · position vs illustrative budget</div>
+<div class="section-label"><span class="num">05.</span>Cloud vs on-prem · position vs illustrative budget</div>
 
 <table class="data">
   <thead>
@@ -247,7 +285,7 @@
 </div>
 
 <!-- ─────────── Carbon roadmap ─────────── -->
-<div class="section-label"><span class="num">05.</span>Carbon · data-stream status (roadmap, not a number)</div>
+<div class="section-label"><span class="num">06.</span>Carbon · data-stream status (roadmap, not a number)</div>
 
 <table class="data">
   <thead>

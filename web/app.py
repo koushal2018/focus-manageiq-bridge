@@ -112,6 +112,7 @@ def index(request: Request):
             "join_dist": queries.join_distribution(),
             "rightsizing": queries.top_rightsizing(6),
             "cvo": queries.cloud_vs_onprem_with_budget(),
+            "conformance": queries.focus_conformance(),
             "active": "home",
         },
     )

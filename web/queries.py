@@ -248,25 +248,154 @@ def provider_ingest() -> list[dict]:
 
 
 def join_distribution() -> list[dict]:
-    """Join status with percentages, mapped to the reference's 4 segments."""
+    """Join status with percentages, mapped to the reference's 4 segments.
+
+    The FOCUS-only bucket is SPLIT (J-6): managed-service rows (AI/ML,
+    storage, networking — no VM exists, so unmatched is *expected*) vs
+    compute rows that should have matched (a real worklist). This stops
+    "matched %" reading as a failure — see GOTCHAS J-6.
+    """
     rows = db.query("SELECT status, COUNT(*) AS n FROM resource_join_map GROUP BY status")
     total = sum(r["n"] for r in rows) or 1
-    label = {
-        "matched": ("Matched · FOCUS ↔ ManageIQ", "seg-1"),
-        "unmatched_focus_only": ("FOCUS-only · no inventory record", "seg-2"),
-        "unmatched_miq_only": ("Inventory-only · no cost row", "seg-3"),
-        "no_resource_id": ("No resource id · tax/refund/support", "seg-4"),
-        "ambiguous": ("Ambiguous · key collision", "seg-4"),
-    }
-    order = ["matched", "unmatched_focus_only", "unmatched_miq_only", "no_resource_id", "ambiguous"]
     by = {r["status"]: r["n"] for r in rows}
+
+    # Within unmatched_focus_only, how many are managed services (expected)
+    # vs compute (should-have-matched)? Categories with no VM representation
+    # in ManageIQ are expected to be cost-only.
+    EXPECTED_CATS = ("AI and Machine Learning", "Storage", "Networking",
+                     "Analytics", "Databases", "Integration", "Management and Governance")
+    fo = db.query("""
+        SELECT focus_service_category AS cat, COUNT(*) AS n
+        FROM resource_join_map WHERE status='unmatched_focus_only'
+        GROUP BY focus_service_category""")
+    expected = 0
+    worklist = 0
+    for r in fo:
+        cat = (r["cat"] or "")
+        # a row's category string may be " | "-joined; treat as expected if
+        # ANY part is a managed-service category and none is Compute.
+        parts = [p.strip() for p in cat.split("|")]
+        is_compute = any(p == "Compute" for p in parts)
+        is_expected = any(p in EXPECTED_CATS for p in parts) and not is_compute
+        if is_expected:
+            expected += r["n"]
+        else:
+            worklist += r["n"]
+
     out = []
-    for s in order:
+    if by.get("matched"):
+        out.append({"status": "matched", "label": "Matched · FOCUS ↔ ManageIQ",
+                    "seg": "seg-1", "n": by["matched"],
+                    "pct": round(100.0 * by["matched"] / total, 1)})
+    if expected:
+        out.append({"status": "expected", "label": "Managed services · cost-only (expected)",
+                    "seg": "seg-2", "n": expected, "pct": round(100.0 * expected / total, 1)})
+    if worklist:
+        out.append({"status": "worklist", "label": "Compute, FOCUS-only · tagging worklist",
+                    "seg": "seg-4", "n": worklist, "pct": round(100.0 * worklist / total, 1)})
+    if by.get("unmatched_miq_only"):
+        out.append({"status": "unmatched_miq_only", "label": "Inventory-only · no cost row",
+                    "seg": "seg-3", "n": by["unmatched_miq_only"],
+                    "pct": round(100.0 * by["unmatched_miq_only"] / total, 1)})
+    for s in ("no_resource_id", "ambiguous"):
         if by.get(s):
-            lbl, seg = label[s]
-            out.append({"status": s, "label": lbl, "seg": seg,
+            lbl = {"no_resource_id": "No resource id · tax/refund/support",
+                   "ambiguous": "Ambiguous · key collision"}[s]
+            out.append({"status": s, "label": lbl, "seg": "seg-4",
                         "n": by[s], "pct": round(100.0 * by[s] / total, 1)})
     return out
+
+
+# Mandatory FOCUS v1.3 columns that MUST NOT be null (verified against the
+# spec via the focus-finops MCP — §3.1.x "MUST NOT be null"). The check is
+# deliberately conservative: only columns the spec marks Mandatory + non-null.
+_FOCUS_MANDATORY_NONNULL = [
+    ("service_category", "ServiceCategory"),
+    ("service_provider_name", "ServiceProviderName"),
+    ("billing_currency", "BillingCurrency"),
+    ("charge_period_start", "ChargePeriodStart"),
+    ("charge_period_end", "ChargePeriodEnd"),
+    ("billed_cost", "BilledCost"),
+]
+
+# ServiceCategory allowed values (FOCUS v1.3 §3.1.55, closed set, via MCP).
+_FOCUS_SERVICE_CATEGORIES = {
+    "AI and Machine Learning", "Analytics", "Business Applications", "Compute",
+    "Databases", "Developer Tools", "Multicloud", "Identity", "Integration",
+    "Internet of Things", "Management and Governance", "Media", "Migration",
+    "Mobile", "Networking", "Security", "Storage", "Web", "Other",
+}
+
+
+def focus_conformance() -> dict:
+    """Validate the loaded focus_costs against FOCUS v1.3 normative rules.
+
+    Not a claim — a check. Surfaces row-level conformance so leadership sees
+    the data is *validated* FOCUS, not just labelled FOCUS (GOTCHAS F-2).
+    Every rule reports pass/fail counts; the headline is % conformant.
+    """
+    total = db.query("SELECT COUNT(*) AS n FROM focus_costs")[0]["n"] or 0
+    checks: list[dict] = []
+
+    # 1. Mandatory non-null columns.
+    for col, display in _FOCUS_MANDATORY_NONNULL:
+        bad = db.query(f"SELECT COUNT(*) AS n FROM focus_costs WHERE {col} IS NULL")[0]["n"]
+        checks.append({
+            "rule": f"{display} present (non-null)",
+            "kind": "mandatory-non-null",
+            "fail": bad,
+            "ok": bad == 0,
+        })
+
+    # 2. ServiceCategory ∈ allowed closed set.
+    cats = db.query("SELECT DISTINCT service_category AS c FROM focus_costs WHERE service_category IS NOT NULL")
+    bad_cats = [c["c"] for c in cats if c["c"] not in _FOCUS_SERVICE_CATEGORIES]
+    bad_cat_rows = 0
+    if bad_cats:
+        bad_cat_rows = db.query(
+            "SELECT COUNT(*) AS n FROM focus_costs WHERE service_category = ANY(%(b)s)",
+            {"b": bad_cats})[0]["n"]
+    checks.append({
+        "rule": "ServiceCategory in FOCUS allowed values",
+        "kind": "allowed-value",
+        "fail": bad_cat_rows,
+        "ok": bad_cat_rows == 0,
+        "detail": ("offending: " + ", ".join(bad_cats)) if bad_cats else "",
+    })
+
+    # 3. USD normalization applied wherever a billing currency + cost exist
+    #    (H-1 — every billable row must carry billed_cost_usd).
+    bad_usd = db.query("""
+        SELECT COUNT(*) AS n FROM focus_costs
+        WHERE billed_cost IS NOT NULL AND billed_cost_usd IS NULL""")[0]["n"]
+    checks.append({
+        "rule": "USD normalization present (billed_cost_usd)",
+        "kind": "currency",
+        "fail": bad_usd,
+        "ok": bad_usd == 0,
+    })
+
+    # 4. BillingCurrency is a 3-letter ISO-ish code (StringHandling sanity).
+    bad_ccy = db.query("""
+        SELECT COUNT(*) AS n FROM focus_costs
+        WHERE billing_currency !~ '^[A-Z]{3}$'""")[0]["n"]
+    checks.append({
+        "rule": "BillingCurrency is a 3-letter code",
+        "kind": "format",
+        "fail": bad_ccy,
+        "ok": bad_ccy == 0,
+    })
+
+    failed_rules = sum(1 for c in checks if not c["ok"])
+    total_fail_rows = sum(c["fail"] for c in checks)
+    return {
+        "total_rows": total,
+        "checks": checks,
+        "rules_total": len(checks),
+        "rules_passed": len(checks) - failed_rules,
+        "conformant": failed_rules == 0,
+        "total_fail_rows": total_fail_rows,
+    }
 
 
 def top_rightsizing(limit: int = 6) -> list[dict]:
