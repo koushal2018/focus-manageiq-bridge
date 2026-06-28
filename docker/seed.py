@@ -31,10 +31,19 @@ def main() -> int:
     paths = focus_native.write_all()
     print(f"[seed] generators: wrote native-FOCUS exports {list(paths)}")
 
-    # 2. MIQ inventory + utilization snapshot (appliance retired, LM-1)
-    from join import miq_snapshot
-    vms_path, util_path = miq_snapshot.write_snapshots()
-    print(f"[seed] miq snapshot: {vms_path}, {util_path}")
+    # 2. MIQ inventory + utilization. Default: synthesized snapshot (appliance
+    # retired, LM-1). If MIQ_URL is set (a real appliance is configured), use
+    # the LIVE collector instead — same two files, drop-in (Spec 2). The
+    # collector is the production path; the snapshot is the no-appliance demo.
+    if os.environ.get("MIQ_URL"):
+        from join import miq_collector
+        vms_path, util_path = miq_collector.write_snapshots()
+        print(f"[seed] miq LIVE collect: {vms_path}, {util_path}")
+    else:
+        from join import miq_snapshot
+        vms_path, util_path = miq_snapshot.write_snapshots()
+        print(f"[seed] miq snapshot (synthesized; set MIQ_URL for live): "
+              f"{vms_path}, {util_path}")
 
     # 3. connector dispatcher — registry-driven normalize to FOCUS
     from connectors import dispatcher
