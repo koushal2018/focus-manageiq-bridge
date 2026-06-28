@@ -534,3 +534,8 @@ _(nothing yet — start with Azure per SPEC §2)_
 
 ## Docker-compose / portability
 _(nothing yet)_
+
+### W-13. A secret-scanning hook self-flags on its own detection patterns — exclude the scanner from its own scan
+- **What:** The `secret-guard.sh` PreToolUse hook scans the staged diff for credential signatures (`AKIA…`, `Basic <b64>`, `BASIC_AUTH_PASS=`, PEM). On the very commit that ADDED the script, the guard matched its own regex literals and would have blocked the commit — a false positive. (It only slipped through because the hook wasn't active yet and ran via a manual call.)
+- **Why it matters:** A scanner that contains the patterns it hunts for will block any commit touching the scanner, and the same over-broad matching flags redacted placeholders/templates (e.g. `Basic <BASE64_USER_COLON_PASS>` from CX-6). Either makes the guard annoying enough to be disabled — which defeats it.
+- **EBA action:** Exclude the scanner's own home from its scan (`git diff --cached -- . ':(exclude).claude/hooks/*'`) and drop placeholder-shaped matches (`<UPPER_SNAKE>`, `REDACTED`, `EXAMPLE`, `placeholder`, `xxxx`) before testing the pattern. Verify all three after: (a) real secret in app code still blocks, (b) the guard script itself doesn't self-flag, (c) a redacted template doesn't flag. Tighten patterns to assigned values (`KEY=<nonempty>`, populated `Basic <b64>`), not the bare token name, to keep false positives low.

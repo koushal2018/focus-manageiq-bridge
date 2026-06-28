@@ -9,8 +9,11 @@ set -uo pipefail
 cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || exit 0
 command -v git >/dev/null 2>&1 || exit 0
 
-# Only inspect what's actually staged for this commit.
-staged="$(git diff --cached 2>/dev/null)" || exit 0
+# Only inspect what's actually staged for this commit. Exclude the hook
+# scripts themselves — they contain the detection patterns as literal regexes,
+# which would otherwise self-flag (false positive). Real secrets never live in
+# .claude/hooks/.
+staged="$(git diff --cached -- . ':(exclude).claude/hooks/*' 2>/dev/null)" || exit 0
 [ -n "$staged" ] || exit 0
 
 # Credential signatures. Kept deliberately tight to avoid false positives:
@@ -20,8 +23,12 @@ staged="$(git diff --cached 2>/dev/null)" || exit 0
 #   - PEM private-key headers
 patterns='(AKIA|ASIA)[A-Z0-9]{16}|Basic [A-Za-z0-9+/]{16,}={0,2}|BASIC_AUTH_PASS=[^[:space:]"'"'"']+|-----BEGIN [A-Z ]*PRIVATE KEY-----'
 
-# Only consider ADDED lines (leading '+'), not context/removed.
-hits="$(printf '%s\n' "$staged" | grep -E '^\+' | grep -nE "$patterns" 2>/dev/null)" || true
+# Only consider ADDED lines (leading '+'), not context/removed. Drop obvious
+# placeholders/templates (<...>, xxxx, REDACTED, example) so a redacted value
+# doesn't self-flag.
+hits="$(printf '%s\n' "$staged" | grep -E '^\+' \
+        | grep -ivE '<[A-Z0-9_]+>|REDACTED|EXAMPLE|placeholder|xxxx' \
+        | grep -nE "$patterns" 2>/dev/null)" || true
 
 if [ -n "$hits" ]; then
   {
