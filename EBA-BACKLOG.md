@@ -121,6 +121,23 @@ entries; read those before estimating.
   outcome for a bank (SPEC §0). Fail closed.
 - **GOTCHAS:** B-1, B-2, B-3, B-4.
 
+### B-8.5. AI cost attribution via an AI gateway (STRETCH / roadmap — do not let it eat the sprint)
+- **Done when:** a written design (not code) for joining the FOCUS billing
+  export to an **AI gateway** usage feed — gateway provides per-request
+  model, input/output tokens, calling team/app; FOCUS export stays the
+  authoritative cost. Same cost-from-one-source, dimension-from-another
+  shape as the FOCUS↔MIQ join (B-2).
+- **Reason:** FOCUS makes AI *cost* native (`ServiceCategory='AI and Machine
+  Learning'`, v1.3 `ServiceSubcategory='Generative AI'`) but per-**model**/
+  per-**token** breakdown is NOT normative yet — it rides in `SkuMeter` and
+  depends on how each provider tags it (Bedrock/Azure OpenAI clean, OCI
+  not). The FOCUS community is standardising this (open FRs #2489/#2488/
+  #2487, extending #2405) but it's not ratified. A gateway (Bedrock proxy /
+  LiteLLM-style) sees model + tokens + team per request and removes that
+  provider-tag dependency — and future-proofs chargeback if ENBD routes all
+  AI through it. Scope it; don't build it in 3 days.
+- **GOTCHAS:** F-2, F-3.
+
 ### B-9. Carbon: implement nothing, hand over the roadmap
 - **Done when:** Leadership has `docs/carbon-roadmap.md` from this PoC,
   with explicit "this is the work the EBA team did NOT do" framing.

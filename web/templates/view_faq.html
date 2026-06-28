@@ -79,6 +79,39 @@
     drill-down, and the AI answers. If two screens ever disagree, that's a bug we'd want to know about — they're built
     to agree.</p></div>
   </details>
+  <details class="faq-q"><summary>Is AI / GenAI spend supported by FOCUS? How is it broken down by model?</summary>
+    <div class="faq-a">
+      <p><strong>Partly — and the console says so honestly ("Conditional").</strong> AI <em>cost</em> is FOCUS-native:
+      <code>ServiceCategory = 'AI and Machine Learning'</code> is a mandatory allowed value, and FOCUS v1.3 adds
+      <code>ServiceSubcategory</code> values including <strong>Generative AI</strong> and <strong>Machine Learning</strong>.
+      So "how much are we spending on AI?" is fully spec-supported.</p>
+      <p><strong>What is NOT yet normative</strong> is the breakdown by <em>model</em> and <em>token type</em>. FOCUS has
+      no column for "claude-3-5-sonnet" or "input vs output tokens." We carry the model id in <code>SkuMeter</code> (the
+      general "what's being metered" field) and parse it out — Bedrock and Azure OpenAI populate it cleanly; OCI Gen-AI
+      is inconsistent and needs backfill. That provider-dependence is exactly why the verdict is "Conditional," not
+      "Native."</p>
+      <p>This isn't a gap we invented — the FOCUS community is <strong>actively standardising it right now</strong> (open
+      proposals for recommended AI <code>SkuMeter</code> values, an <code>InputModality</code> property, and
+      token/cache representation). The proposals <em>extend SkuMeter</em>, so this approach ages well: when ratified, it
+      becomes a mapping change, not a redesign.</p>
+    </div>
+  </details>
+  <details class="faq-q"><summary>Could we get richer AI data from an AI gateway instead of the billing export?</summary>
+    <div class="faq-a">
+      <p><strong>Yes — and for per-model / per-team / per-prompt detail, that's the stronger source.</strong> The FOCUS
+      billing export answers "what did AI cost," but an <strong>AI gateway</strong> (e.g. a Bedrock/LiteLLM-style proxy
+      that all AI calls route through) sees what billing can't: the exact model, input/output token counts, the calling
+      application or team, latency, and cache hits — per request, in real time.</p>
+      <p>The intended pattern is <strong>both, joined — not either/or</strong>: the FOCUS export stays the
+      <em>authoritative cost</em> (it's what you're actually invoiced), and the gateway provides the
+      <em>usage dimensions</em> (model, tokens, team) to attribute that cost — the same shape as the FOCUS↔ManageIQ
+      join elsewhere in this console (cost from one source, the breakdown dimension from another). It also future-proofs:
+      if ENBD standardises AI access behind a gateway, the per-model and chargeback story stops depending on how each
+      provider tags <code>SkuMeter</code>.</p>
+      <p>It's a roadmap option, not built in this PoC — but it's the natural next step for AI cost attribution and worth
+      scoping in the sprint.</p>
+    </div>
+  </details>
   <details class="faq-q"><summary>Why is "cost by business unit" mostly untagged?</summary>
     <div class="faq-a"><p>Business unit isn't a FOCUS column — it lives in resource <strong>tags</strong>
     (<code>cost-center</code>), and tagging is incomplete in this synthetic set (~38%). The console shows the tagged
