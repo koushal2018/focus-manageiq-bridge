@@ -35,3 +35,22 @@ def test_discover_lists_csv_files(tmp_path, monkeypatch):
 def test_registered_in_adapters():
     assert "upload-focus" in adapters.ADAPTERS
     assert adapters.ADAPTERS["upload-focus"].source_type == "upload-focus"
+
+
+def test_discover_honors_watermark(tmp_path, monkeypatch):
+    import time
+    monkeypatch.setattr(adapters, "UPLOAD_ROOT", str(tmp_path))
+    d = adapters.inbox_dir("src-wm")
+    # first file, then advance the watermark past it
+    with open(os.path.join(d, "first.csv"), "w") as f:
+        f.write("ServiceCategory,BillingCurrency\nCompute,USD\n")
+    src = adapters.UploadSource()
+    src.advance_watermark(_cfg("src-wm"))
+    # the already-seen file must NOT be rediscovered
+    assert src.discover(_cfg("src-wm")) == []
+    # a NEW file written after the watermark IS discovered
+    time.sleep(0.01)
+    with open(os.path.join(d, "second.csv"), "w") as f:
+        f.write("ServiceCategory,BillingCurrency\nCompute,USD\n")
+    found = src.discover(_cfg("src-wm"))
+    assert len(found) == 1 and found[0].export_id == "second.csv"
