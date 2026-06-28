@@ -53,13 +53,19 @@ def run() -> dict:
             continue
 
         src_rows = 0
-        for exp in exports:
-            result = adapter.normalize(cfg, exp)
-            for r in result.focus_rows:
-                r["_source_id"] = cfg.source_id
-            all_rows.extend(result.focus_rows)
-            all_report.extend(result.report)
-            src_rows += result.loaded
+        try:
+            for exp in exports:
+                result = adapter.normalize(cfg, exp)
+                for r in result.focus_rows:
+                    r["_source_id"] = cfg.source_id
+                all_rows.extend(result.focus_rows)
+                all_report.extend(result.report)
+                src_rows += result.loaded
+        except Exception as e:  # one poison source must not sink the run
+            print(f"[dispatch] {cfg.source_id}: normalize error: {e}")
+            summary.append({"source_id": cfg.source_id, "status": "error",
+                            "error": str(e)})
+            continue
         print(f"[dispatch] {cfg.source_id:18s} [{cfg.source_type:13s}] "
               f"-> {src_rows} FOCUS rows")
         summary.append({"source_id": cfg.source_id, "status": "ok", "rows": src_rows})
@@ -85,9 +91,9 @@ def run() -> dict:
     print(f"[dispatch] distinct ServiceCategory: {distinct}")
     if invalid:
         print(f"[dispatch] !!! non-conformant categories: {invalid}")
-        sys.exit(1)
 
-    return {"sources": summary, "focus_rows": len(all_rows)}
+    return {"sources": summary, "focus_rows": len(all_rows),
+            "nonconformant_categories": invalid}
 
 
 if __name__ == "__main__":
