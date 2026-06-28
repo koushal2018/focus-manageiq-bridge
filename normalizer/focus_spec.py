@@ -74,6 +74,7 @@ FOCUS_COLUMNS_V1_3 = [
     "SubAccountName",
     # Charge / cost
     "ChargeCategory",
+    "ChargeClass",            # 'Correction' marks a restatement vs an original charge
     "ChargeDescription",
     "ChargeFrequency",
     "BilledCost",
@@ -115,9 +116,19 @@ FOCUS_COLUMNS_V1_3 = [
     # Tagging
     "Tags",
     # Commitment discounts (Savings Plans / Reserved / OCI commitments). Their
-    # presence is why EffectiveCost can differ from BilledCost/ListCost.
+    # presence is why EffectiveCost can differ from BilledCost/ListCost. Full
+    # set per the spec's commitment_discount_scenarios examples (FIN-4): the
+    # Category/Type/Quantity/Unit describe the commitment, not just its id/status.
     "CommitmentDiscountId",
-    "CommitmentDiscountStatus",
+    "CommitmentDiscountName",
+    "CommitmentDiscountCategory",   # 'Spend' | 'Usage'
+    "CommitmentDiscountType",       # provider type, e.g. 'Reserved' / 'Savings Plan'
+    "CommitmentDiscountStatus",     # 'Used' | 'Unused'
+    "CommitmentDiscountQuantity",
+    "CommitmentDiscountUnit",
+    # Provider passthrough seen in spec examples.
+    "HostProviderName",             # the provider hosting the resource (SaaS-on-cloud)
+    "InvoiceId",
 ]
 
 # Closed set for PricingCategory (FOCUS v1.3 §3.1.40). The rate basis a charge

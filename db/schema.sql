@@ -54,6 +54,7 @@ CREATE TABLE focus_costs (
 
     -- Charge / cost
     charge_category         TEXT,                          -- ChargeCategory
+    charge_class            TEXT,                          -- ChargeClass ('Correction' = restatement)
     charge_description      TEXT,                          -- ChargeDescription
     charge_frequency        TEXT,                          -- ChargeFrequency
     billed_cost             NUMERIC(20,6),                 -- BilledCost (in billing_currency)
@@ -103,10 +104,18 @@ CREATE TABLE focus_costs (
     -- Tags as a JSON blob (Azure/AWS/OCI all hand us these differently)
     tags                    JSONB,                         -- Tags
 
-    -- Commitment discount identity (Savings Plans / Reserved / OCI commitments).
-    -- Why EffectiveCost can diverge from BilledCost/ListCost (FinOps coverage story).
-    commitment_discount_id      TEXT,                          -- CommitmentDiscountId
-    commitment_discount_status  TEXT,                          -- CommitmentDiscountStatus
+    -- Commitment discount (Savings Plans / Reserved / OCI commitments). Full
+    -- descriptive set per the spec commitment examples (FIN-4): why EffectiveCost
+    -- can diverge from BilledCost/ListCost (the FinOps coverage story).
+    commitment_discount_id        TEXT,                        -- CommitmentDiscountId
+    commitment_discount_name      TEXT,                        -- CommitmentDiscountName
+    commitment_discount_category  TEXT,                        -- CommitmentDiscountCategory ('Spend'|'Usage')
+    commitment_discount_type      TEXT,                        -- CommitmentDiscountType
+    commitment_discount_status    TEXT,                        -- CommitmentDiscountStatus ('Used'|'Unused')
+    commitment_discount_quantity  NUMERIC(20,6),               -- CommitmentDiscountQuantity
+    commitment_discount_unit      TEXT,                        -- CommitmentDiscountUnit
+    host_provider_name            TEXT,                        -- HostProviderName
+    invoice_id                    TEXT,                        -- InvoiceId
 
     -- Provider x_ extension columns preserved as JSONB (GOTCHA H-9) — e.g.
     -- AWS x_Discounts/x_Operation/x_ServiceCode. Portable FOCUS consumers

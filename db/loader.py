@@ -66,6 +66,7 @@ FOCUS_CSV_TO_DB_COLUMN = {
     "SubAccountId": "sub_account_id",
     "SubAccountName": "sub_account_name",
     "ChargeCategory": "charge_category",
+    "ChargeClass": "charge_class",
     "ChargeDescription": "charge_description",
     "ChargeFrequency": "charge_frequency",
     "BilledCost": "billed_cost",
@@ -97,7 +98,14 @@ FOCUS_CSV_TO_DB_COLUMN = {
     "PricingUnit": "pricing_unit",
     "Tags": "tags",
     "CommitmentDiscountId": "commitment_discount_id",
+    "CommitmentDiscountName": "commitment_discount_name",
+    "CommitmentDiscountCategory": "commitment_discount_category",
+    "CommitmentDiscountType": "commitment_discount_type",
     "CommitmentDiscountStatus": "commitment_discount_status",
+    "CommitmentDiscountQuantity": "commitment_discount_quantity",
+    "CommitmentDiscountUnit": "commitment_discount_unit",
+    "HostProviderName": "host_provider_name",
+    "InvoiceId": "invoice_id",
 }
 
 JOIN_CSV_TO_DB_COLUMN = {
