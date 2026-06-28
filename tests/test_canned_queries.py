@@ -25,6 +25,25 @@ def test_compute_cost_query_passes_sql_guard():
     sql_guard.validate(canned.QUERIES["compute_cost_by_provider"].sql)
 
 
+def test_unit_price_query_registered_and_guarded():
+    q = canned.QUERIES["compute_unit_price_by_provider"]
+    # It must compare UNIT PRICE (not a spend total) and normalize AED→USD.
+    assert "list_unit_price" in q.sql
+    assert "fx_rate_to_usd" in q.sql            # AED normalization
+    assert "service_category = 'Compute'" in q.sql
+    sql_guard.validate(q.sql)
+
+
+def test_unit_price_query_shows_provider_spread():
+    db = _db_or_skip()
+    res = canned.run_canned("compute_unit_price_by_provider")
+    prices = {r["service_provider_name"]: float(r["list_usd_per_vcpu_hour"])
+              for r in res["rows"]}
+    assert len(prices) >= 3
+    # the providers genuinely differ — a comparison is meaningful (FIN-2)
+    assert max(prices.values()) - min(prices.values()) > 0.005, prices
+
+
 def _db_or_skip():
     try:
         from web import db

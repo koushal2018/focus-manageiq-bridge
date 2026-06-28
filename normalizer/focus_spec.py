@@ -51,8 +51,17 @@ CHARGE_CATEGORIES_V1_3 = {
 }
 
 
-# FOCUS v1.3 column IDs we emit (subset that matters for this PoC).
-# Sourced from focus-finops MCP list_columns v1-3 on 2026-06-25.
+# FOCUS v1.3 column IDs we emit. Sourced + feature-levels verified against the
+# focus-finops MCP (list_columns v1-3 + spec chunk 7 'Content constraints').
+#
+# HISTORY (FIN-2): this list was originally a hand-picked "subset that matters
+# for the PoC" and OMITTED the UNIT-PRICE columns — which silently made
+# cross-provider price comparison impossible (you can't ask "is an AWS m5.xlarge
+# pricier than a comparable Azure box" without a per-unit price). FOCUS DOES
+# standardize this (ListUnitPrice/ContractedUnitPrice per PricingUnit; spec
+# §2.7 Cost Comparison, §2.21 Unit Price Comparison). We now emit the full set
+# of Mandatory columns plus the high-value Conditional ones (unit prices,
+# pricing category) so the synthetic data is real-shaped, not a shortcut.
 FOCUS_COLUMNS_V1_3 = [
     # Identity / period
     "BillingAccountId",
@@ -73,6 +82,14 @@ FOCUS_COLUMNS_V1_3 = [
     "ContractedCost",
     "BillingCurrency",
     "PricingCurrency",
+    # Unit prices (FIN-2) — the columns that make cost COMPARISON possible.
+    # ListUnitPrice = published price per ONE PricingUnit of the SKU, pre-discount,
+    # in BillingCurrency (spec 3.1.39). ContractedUnitPrice = negotiated unit
+    # price (3.1.33). PricingCategory = On-Demand | Committed | Dynamic | Other
+    # (the rate basis). Invariant we hold: ListUnitPrice * PricingQuantity ≈ ListCost.
+    "ListUnitPrice",
+    "ContractedUnitPrice",
+    "PricingCategory",
     # Provider
     "ServiceProviderName",   # v1.3 replacement for deprecated 'Provider'
     "InvoiceIssuerName",     # v1.3 replacement for deprecated 'Publisher'
@@ -102,3 +119,12 @@ FOCUS_COLUMNS_V1_3 = [
     "CommitmentDiscountId",
     "CommitmentDiscountStatus",
 ]
+
+# Closed set for PricingCategory (FOCUS v1.3 §3.1.40). The rate basis a charge
+# was priced under — distinct from ChargeCategory.
+PRICING_CATEGORIES_V1_3 = {
+    "On-Demand",
+    "Committed",
+    "Dynamic",
+    "Other",
+}

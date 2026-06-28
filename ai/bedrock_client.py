@@ -55,6 +55,11 @@ Schema (all tables are read-only; FOCUS v1.3 column names in snake_case):
     billed_cost, effective_cost, list_cost, contracted_cost,
     billed_cost_usd,   -- USD-normalized; ALWAYS use this for any SUM/total
                        -- across providers. billed_cost mixes AED and USD.
+    fx_rate_to_usd,    -- the rate applied to billed_cost (AED rows: ~0.272).
+    list_unit_price,   -- price per ONE pricing_unit of the SKU (in billing_currency),
+    contracted_unit_price,  -- pre/post negotiated discount. THE column for
+                       -- comparing how pricey a provider's unit of capacity is.
+    pricing_category,  -- rate basis: On-Demand | Committed | Dynamic | Other
     billing_currency, pricing_currency,
     service_provider_name, invoice_issuer_name,
     service_category, service_subcategory, service_name,
@@ -167,6 +172,17 @@ Strict rules:
          charge_category='Usage' (the run-rate), and for a true apples-to-apples
          compute comparison also filter service_category='Compute'. Do NOT call
          an all-category total "most expensive".
+       - "is X PRICIER / more expensive PER unit / per instance / per vCPU than
+         Y", or any RATE/price comparison (not spend volume) → use the UNIT
+         PRICE, not a sum: AVG(list_unit_price) (or contracted_unit_price) for
+         service_category='Compute', GROUP BY provider. A spend total reflects
+         how MUCH you ran, not how pricey a unit is — only unit price answers
+         "is an AWS box pricier than a comparable Azure/OCI one". Normalize
+         AED→USD with the per-row fx_rate_to_usd (Azure bills AED) before
+         comparing: AVG(list_unit_price * CASE WHEN billing_currency='AED' THEN
+         fx_rate_to_usd ELSE 1 END). Note "comparable" assumes the SKUs are
+         equivalent capacity — the unit is provider-specified (pricing_unit), so
+         say the comparison is per the providers' own pricing units.
        - If the user explicitly wants the total bill, you may sum all categories,
          but then label it "total billed (incl. commitments, tax, credits)", not
          "most expensive".

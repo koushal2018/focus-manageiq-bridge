@@ -81,13 +81,47 @@ def test_charge_category_mix_loaded():
     assert {"Usage", "Tax", "Purchase"} <= cats, f"charge categories loaded: {cats}"
 
 
-def test_commitment_rows_have_effective_below_billed():
-    """Commitment coverage means EffectiveCost < BilledCost for covered rows
-    (in USD, so the comparison is currency-safe)."""
+def test_commitment_rows_show_savings_vs_list():
+    """Commitment coverage shows as EffectiveCost < ListCost (FIN-2): covered
+    usage is billed at the contracted rate (billed==effective) and the savings
+    are vs the on-demand list price. Compared on native amounts within a row, so
+    no cross-currency issue (list and effective share the row's currency)."""
     db = _db_or_skip()
     n = db.query("""
         SELECT COUNT(*) AS n FROM focus_costs
         WHERE commitment_discount_id IS NOT NULL
           AND commitment_discount_id <> ''
-          AND effective_cost < billed_cost""")[0]["n"]
-    assert n > 0, "expected commitment-covered rows with EffectiveCost < BilledCost"
+          AND effective_cost < list_cost""")[0]["n"]
+    assert n > 0, "expected commitment-covered rows with EffectiveCost < ListCost"
+
+
+def test_unit_prices_reconcile_to_list_cost():
+    """FIN-2 invariant: ListUnitPrice * PricingQuantity ≈ ListCost for compute
+    usage rows (the unit price is real, not a decorative column)."""
+    db = _db_or_skip()
+    bad = db.query("""
+        SELECT COUNT(*) AS n FROM focus_costs
+        WHERE service_category = 'Compute' AND charge_category = 'Usage'
+          AND list_unit_price IS NOT NULL
+          AND ABS(list_unit_price * pricing_quantity - list_cost) > 0.01""")[0]["n"]
+    assert bad == 0, f"{bad} compute rows where unit_price*qty != list_cost"
+
+
+def test_compute_unit_price_differs_by_provider():
+    """The whole point of FIN-2: providers have DIFFERENT unit prices, so a
+    cross-provider comparison is meaningful (the old data priced them all the
+    same). Compare in USD so AED-billed Azure is normalized."""
+    db = _db_or_skip()
+    rows = db.query("""
+        SELECT service_provider_name p,
+               AVG(list_unit_price * CASE WHEN billing_currency='AED'
+                   THEN fx_rate_to_usd ELSE 1 END) AS usd_per_vcpu_hr
+        FROM focus_costs
+        WHERE service_category='Compute' AND charge_category='Usage'
+          AND list_unit_price IS NOT NULL
+        GROUP BY 1""")
+    prices = {r["p"]: float(r["usd_per_vcpu_hr"]) for r in rows}
+    assert len(prices) >= 3, f"expected 3 providers, got {prices}"
+    # not all equal — there is a real spread to compare
+    assert max(prices.values()) - min(prices.values()) > 0.005, \
+        f"unit prices too close to compare: {prices}"

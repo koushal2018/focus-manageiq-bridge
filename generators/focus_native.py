@@ -99,9 +99,9 @@ def generate_aws(days: int = 3) -> tuple[list[dict], list[str]]:
         for wl in aws_wls:
             for _ in range(common.gen_scale()):
                 sub = rng.choice(common.SUB_ACCOUNTS["aws"])
-                cost = round(24 * (0.05 * wl.cpu_cores) + rng.uniform(-0.1, 0.1), 6)
-                cid, cstatus = common.commitment_fields(rng)
-                eff, lst, con = common.effective_spread(rng, cost, bool(cid))
+                # vCPU = the instance size (demo.Nxlarge -> N vCPU). Priced via the
+                # real per-vCPU-hr rate model so ListUnitPrice is comparable (FIN-2).
+                pc = common.compute_charge(rng, "aws", vcpu=wl.cpu_cores, hours=24.0)
                 r = _base_row()
                 r.update({
                     "BillingAccountId": common.FAKE_AWS_ACCOUNT_ID,
@@ -111,19 +111,25 @@ def generate_aws(days: int = 3) -> tuple[list[dict], list[str]]:
                     "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
                     "ChargeCategory": "Usage", "ChargeClass": "",
                     "ChargeDescription": f"EC2 demo.{wl.cpu_cores}xlarge",
-                    "BilledCost": cost, "EffectiveCost": eff, "ListCost": lst, "ContractedCost": con,
+                    "BilledCost": pc["BilledCost"], "EffectiveCost": pc["EffectiveCost"],
+                    "ListCost": pc["ListCost"], "ContractedCost": pc["ContractedCost"],
+                    "ListUnitPrice": pc["ListUnitPrice"],
+                    "ContractedUnitPrice": pc["ContractedUnitPrice"],
+                    "PricingCategory": pc["PricingCategory"],
                     "BillingCurrency": "USD", "PricingCurrency": "USD",
                     "ServiceProviderName": "AWS", "InvoiceIssuerName": "Amazon Web Services, Inc.",
                     "ServiceCategory": "Compute", "ServiceName": "Amazon Elastic Compute Cloud",
                     "SkuId": f"demo.{wl.cpu_cores}xlarge", "SkuMeter": "BoxUsage",
+                    "SkuPriceId": f"aws-ec2-demo.{wl.cpu_cores}xlarge-od",
                     "ResourceId": wl.aws_instance_id,
                     "ResourceName": wl.name_in_provider("aws"),
                     "ResourceType": "Instance",
                     "RegionId": "me-central-1", "RegionName": "Middle East (UAE)",
-                    "ConsumedQuantity": 24, "ConsumedUnit": "Hrs",
-                    "PricingQuantity": 24, "PricingUnit": "Hrs",
+                    "ConsumedQuantity": pc["ConsumedQuantity"], "ConsumedUnit": pc["ConsumedUnit"],
+                    "PricingQuantity": pc["PricingQuantity"], "PricingUnit": pc["PricingUnit"],
                     "Tags": common.tag_sparsity(rng, wl.tags),
-                    "CommitmentDiscountId": cid, "CommitmentDiscountStatus": cstatus,
+                    "CommitmentDiscountId": pc["CommitmentDiscountId"],
+                    "CommitmentDiscountStatus": pc["CommitmentDiscountStatus"],
                     "x_Discounts": "0", "x_Operation": "RunInstances", "x_ServiceCode": "AmazonEC2",
                 })
                 rows.append(r)
@@ -202,10 +208,11 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
                 arm = wl.azure_resource_id or ""
                 rg = arm.split("/resourceGroups/")[1].split("/")[0] if "/resourceGroups/" in arm else ""
                 r = _base_row()
-                cost_usd = round(24 * (1.2 * wl.cpu_cores / 24) + rng.uniform(-0.1, 0.1), 6)
-                billed_aed = common.usd_to_aed(cost_usd)
-                cid, cstatus = common.commitment_fields(rng)
-                eff, lst, con = common.effective_spread(rng, billed_aed, bool(cid))
+                # Priced in USD by the rate model, then converted to AED so the
+                # WHOLE row (costs AND unit prices) is in BillingCurrency=AED —
+                # the B-6/B-7 currency-integrity rule applies to unit prices too.
+                pc = common.compute_charge(rng, "azure", vcpu=wl.cpu_cores, hours=24.0)
+                aed = common.usd_to_aed
                 r.update({
                     "BillingAccountId": common.FAKE_AZURE_SUBSCRIPTION,
                     "BillingAccountName": "DEMO-ENBD-Azure",
@@ -214,19 +221,26 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
                     "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
                     "ChargeCategory": "Usage",
                     "ChargeDescription": f"Virtual Machines D{wl.cpu_cores}s v3",
-                    "BilledCost": billed_aed, "EffectiveCost": eff, "ListCost": lst, "ContractedCost": con,
-                    "BillingCurrency": "AED", "PricingCurrency": "USD",
+                    "BilledCost": aed(pc["BilledCost"]), "EffectiveCost": aed(pc["EffectiveCost"]),
+                    "ListCost": aed(pc["ListCost"]), "ContractedCost": aed(pc["ContractedCost"]),
+                    "ListUnitPrice": aed(pc["ListUnitPrice"]),
+                    "ContractedUnitPrice": aed(pc["ContractedUnitPrice"]),
+                    "PricingCategory": pc["PricingCategory"],
+                    "BillingCurrency": "AED", "PricingCurrency": "AED",
                     "ServiceProviderName": "Microsoft", "InvoiceIssuerName": "Microsoft",
                     "ServiceCategory": "Compute", "ServiceName": "Virtual Machines",
                     "SkuMeter": f"D{wl.cpu_cores}s v3",
+                    "SkuId": f"D{wl.cpu_cores}s_v3",
+                    "SkuPriceId": f"azure-vm-D{wl.cpu_cores}s_v3-od",
                     "ResourceId": arm,
                     "ResourceName": arm.split("/")[-1],
                     "ResourceType": "Microsoft.Compute/virtualMachines",
                     "RegionId": "uaenorth", "RegionName": "UAE North",
-                    "ConsumedQuantity": 24, "ConsumedUnit": "Hour",
-                    "PricingQuantity": 24, "PricingUnit": "Hour",
+                    "ConsumedQuantity": pc["ConsumedQuantity"], "ConsumedUnit": "Hour",
+                    "PricingQuantity": pc["PricingQuantity"], "PricingUnit": "vCPU-Hours",
                     "Tags": common.tag_sparsity(rng, wl.tags),
-                    "CommitmentDiscountId": cid, "CommitmentDiscountStatus": cstatus,
+                    "CommitmentDiscountId": pc["CommitmentDiscountId"],
+                    "CommitmentDiscountStatus": pc["CommitmentDiscountStatus"],
                     "x_SkuMeterId": "demo-meter-0000", "x_ResourceGroupName": rg,
                 })
                 rows.append(r)
@@ -283,9 +297,9 @@ def generate_oci(days: int = 3) -> tuple[list[dict], list[str]]:
         for wl in oci_wls:
             for _ in range(common.gen_scale()):
                 sub = rng.choice(common.SUB_ACCOUNTS["oci"])
-                cost = round(24 * (0.04 * wl.cpu_cores) + rng.uniform(-0.05, 0.05), 6)
-                cid, cstatus = common.commitment_fields(rng)
-                eff, lst, con = common.effective_spread(rng, cost, bool(cid))
+                # OCI SKU now carries the OCPU count so it's size-comparable (the
+                # old 'VM.Standard'/B91449 encoded no size — FIN-2). vCPU≈OCPU here.
+                pc = common.compute_charge(rng, "oci", vcpu=wl.cpu_cores, hours=24.0)
                 r = _base_row()
                 r.update({
                     "BillingAccountId": common.FAKE_OCI_TENANCY,
@@ -293,19 +307,26 @@ def generate_oci(days: int = 3) -> tuple[list[dict], list[str]]:
                     "SubAccountId": sub, "SubAccountName": sub,
                     "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
                     "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
-                    "ChargeCategory": "Usage", "ChargeDescription": "Compute VM.Standard",
-                    "BilledCost": cost, "EffectiveCost": eff, "ListCost": lst, "ContractedCost": con,
+                    "ChargeCategory": "Usage",
+                    "ChargeDescription": f"Compute VM.Standard.E4.Flex ({wl.cpu_cores} OCPU)",
+                    "BilledCost": pc["BilledCost"], "EffectiveCost": pc["EffectiveCost"],
+                    "ListCost": pc["ListCost"], "ContractedCost": pc["ContractedCost"],
+                    "ListUnitPrice": pc["ListUnitPrice"],
+                    "ContractedUnitPrice": pc["ContractedUnitPrice"],
+                    "PricingCategory": pc["PricingCategory"],
                     "BillingCurrency": "USD", "PricingCurrency": "USD",
                     "ServiceProviderName": "Oracle Cloud Infrastructure", "InvoiceIssuerName": "Oracle",
                     "ServiceCategory": "Compute", "ServiceName": "Compute",
-                    "SkuId": "B91449", "SkuMeter": "VM.Standard",
+                    "SkuId": f"B91449-E4Flex-{wl.cpu_cores}ocpu", "SkuMeter": "VM.Standard.E4.Flex - OCPU",
+                    "SkuPriceId": f"oci-compute-e4flex-{wl.cpu_cores}ocpu-od",
                     "ResourceId": wl.oci_resource_id,
                     "ResourceName": wl.name_in_provider("oci"), "ResourceType": "Instance",
                     "RegionId": "me-dubai-1", "RegionName": "UAE Central (Dubai)",
-                    "ConsumedQuantity": 24, "ConsumedUnit": "Hours",
-                    "PricingQuantity": 24, "PricingUnit": "Hours",
+                    "ConsumedQuantity": pc["ConsumedQuantity"], "ConsumedUnit": "Hours",
+                    "PricingQuantity": pc["PricingQuantity"], "PricingUnit": "vCPU-Hours",
                     "Tags": common.tag_sparsity(rng, wl.tags),
-                    "CommitmentDiscountId": cid, "CommitmentDiscountStatus": cstatus,
+                    "CommitmentDiscountId": pc["CommitmentDiscountId"],
+                    "CommitmentDiscountStatus": pc["CommitmentDiscountStatus"],
                     "x_CompartmentId": "ocid1.compartment.oc1..demoanalytics",
                 })
                 rows.append(r)

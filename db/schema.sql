@@ -67,6 +67,12 @@ CREATE TABLE focus_costs (
     contracted_cost         NUMERIC(20,6),                 -- ContractedCost
     billing_currency        TEXT NOT NULL,                 -- BillingCurrency (mandatory in FOCUS)
     pricing_currency        TEXT,                          -- PricingCurrency
+    -- Unit prices (FIN-2) — what makes cross-provider cost COMPARISON possible.
+    -- ListUnitPrice/ContractedUnitPrice = price per ONE pricing_unit of the SKU,
+    -- in billing_currency. pricing_category = rate basis (On-Demand|Committed|…).
+    list_unit_price         NUMERIC(20,8),                 -- ListUnitPrice
+    contracted_unit_price   NUMERIC(20,8),                 -- ContractedUnitPrice
+    pricing_category        TEXT,                          -- PricingCategory
 
     -- Provider (v1.3 names)
     service_provider_name   TEXT,                          -- ServiceProviderName

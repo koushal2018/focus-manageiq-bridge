@@ -55,6 +55,34 @@ QUERIES: dict[str, CannedQuery] = {
             ORDER  BY compute_usage_usd DESC
         """,
     ),
+    "compute_unit_price_by_provider": CannedQuery(
+        name="compute_unit_price_by_provider",
+        description=(
+            "TRUE like-for-like: average compute UNIT PRICE (USD per vCPU-hour) "
+            "by provider, from FOCUS ListUnitPrice. This answers 'is an AWS box "
+            "pricier than a comparable Azure/OCI one?' — unlike a spend total, "
+            "which only reflects how much you ran. USD-normalized so AED-billed "
+            "Azure is comparable."
+        ),
+        sql="""
+            SELECT service_provider_name,
+                   ROUND(AVG(list_unit_price *
+                         CASE WHEN billing_currency = 'AED'
+                              THEN fx_rate_to_usd ELSE 1 END)::NUMERIC, 4)
+                     AS list_usd_per_vcpu_hour,
+                   ROUND(AVG(contracted_unit_price *
+                         CASE WHEN billing_currency = 'AED'
+                              THEN fx_rate_to_usd ELSE 1 END)::NUMERIC, 4)
+                     AS contracted_usd_per_vcpu_hour,
+                   COUNT(*) AS row_count
+            FROM   focus_costs
+            WHERE  service_category = 'Compute'
+              AND  charge_category  = 'Usage'
+              AND  list_unit_price IS NOT NULL
+            GROUP  BY service_provider_name
+            ORDER  BY list_usd_per_vcpu_hour DESC
+        """,
+    ),
     "ai_cost_by_model": CannedQuery(
         name="ai_cost_by_model",
         description="AI/ML cost (USD) grouped by the model id captured in SkuMeter.",

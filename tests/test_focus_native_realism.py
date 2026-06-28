@@ -25,8 +25,13 @@ def test_commitment_rows_have_cost_spread(monkeypatch):
     rows, _ = _rows(monkeypatch, focus_native.generate_aws)
     covered = [r for r in rows if str(r.get("CommitmentDiscountId", ""))]
     assert covered, "expected commitment-covered rows"
-    # at least one row where EffectiveCost < BilledCost (real coverage)
-    assert any(float(r["EffectiveCost"]) < float(r["BilledCost"]) for r in covered)
+    # Commitment SAVINGS show as EffectiveCost < ListCost (FIN-2): the covered
+    # usage is billed at the contracted rate, so billed==effective, and the
+    # discount vs the on-demand list price is the signal. (Previously this
+    # asserted Effective<Billed, which the more accurate unit-price model no
+    # longer holds — billed already reflects the discount.)
+    assert any(float(r["EffectiveCost"]) < float(r["ListCost"]) for r in covered)
+    assert any(r.get("PricingCategory") == "Committed" for r in covered)
 
 
 def test_scale_multiplies_volume(monkeypatch):

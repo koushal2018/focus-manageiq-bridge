@@ -34,6 +34,19 @@ USD_TO_AED = 3.6725  # pegged; obvious and constant, no live FX lookups
 # reproducible (and so a future re-run produces the same join gotchas).
 RNG_SEED = 20260625
 
+# --- Compute rate model (FIN-2) --------------------------------------------
+# Per-provider ON-DEMAND list price per vCPU-hour (USD). These are illustrative
+# DEMO rates — close enough to real-world ratios that a cross-provider unit-price
+# comparison is meaningful (the providers genuinely differ), but obviously not a
+# live price book. They drive ListUnitPrice so the synthetic data can answer
+# "is an AWS box pricier than a comparable Azure/OCI one?" via FOCUS unit prices.
+# A negotiated (Committed) rate is a discount off this; EffectiveCost reflects it.
+COMPUTE_USD_PER_VCPU_HOUR = {
+    "aws":   0.0500,   # ~m5.xlarge-class on-demand, per vCPU-hr
+    "azure": 0.0464,   # ~Dsv3-class — Azure slightly under AWS on-demand
+    "oci":   0.0306,   # OCI E-class — materially cheaper per vCPU-hr
+}
+
 # Bedrock model line items: SPEC s3.1 mandates these for requirement #1.
 BEDROCK_MODELS = [
     # (model_id, input_token_price_per_1k_USD, output_token_price_per_1k_USD)
@@ -407,6 +420,62 @@ def effective_spread(rng: random.Random, billed_usd: float,
     eff = round(billed_usd * 0.70, 6)
     con = round(billed_usd * 0.72, 6)
     return (eff, billed_usd, con)
+
+
+def compute_charge(rng: random.Random, source: str, vcpu: int, hours: float = 24.0) -> dict:
+    """Build a self-consistent set of FOCUS priced fields for one compute charge,
+    driven by a real per-provider per-vCPU-hour rate (FIN-2). This is what makes
+    cross-provider UNIT-PRICE comparison possible and truthful:
+
+      PricingUnit       = 'vCPU-Hours' (the per-unit basis we price on)
+      PricingQuantity   = vcpu * hours
+      ListUnitPrice     = provider on-demand $/vCPU-hr (+ small jitter)
+      ListCost          = ListUnitPrice * PricingQuantity      (INVARIANT)
+      PricingCategory   = 'Committed' if a commitment applies else 'On-Demand'
+      ContractedUnitPrice = negotiated unit price (= list, discounted if committed)
+      EffectiveCost     = ContractedUnitPrice * PricingQuantity (amortized view)
+      BilledCost        = ListCost on-demand; the discounted cost when committed
+
+    All amounts here are USD; the Azure generator converts to AED itself (and the
+    unit price is reported in BillingCurrency, so it converts the unit price too).
+    Returns a dict of USD values + units; the caller sets currency.
+    """
+    base = COMPUTE_USD_PER_VCPU_HOUR.get(source, 0.05)
+    list_unit = round(base * (1.0 + rng.uniform(-0.03, 0.03)), 6)   # tiny rate noise
+    qty = round(vcpu * hours, 6)
+    list_cost = round(list_unit * qty, 6)
+
+    cid, cstatus = commitment_fields(rng)
+    committed = bool(cid)
+    if committed:
+        # negotiated ~30% off list; EffectiveCost amortizes the commitment.
+        contracted_unit = round(list_unit * 0.70, 6)
+        pricing_category = "Committed"
+    else:
+        contracted_unit = list_unit
+        pricing_category = "On-Demand"
+    contracted_cost = round(contracted_unit * qty, 6)
+    # BilledCost: what hit the invoice this period. On-demand = list; committed
+    # workloads are billed at the discounted (contracted) rate here.
+    billed = contracted_cost if committed else list_cost
+    effective = contracted_cost   # amortized/effective view (H-1 family)
+
+    return {
+        "vcpu": vcpu,
+        "PricingUnit": "vCPU-Hours",
+        "PricingQuantity": qty,
+        "ConsumedQuantity": hours,        # the resource ran `hours` hours
+        "ConsumedUnit": "Hours",
+        "ListUnitPrice": list_unit,
+        "ContractedUnitPrice": contracted_unit,
+        "PricingCategory": pricing_category,
+        "ListCost": list_cost,
+        "ContractedCost": contracted_cost,
+        "BilledCost": billed,
+        "EffectiveCost": effective,
+        "CommitmentDiscountId": cid,
+        "CommitmentDiscountStatus": cstatus,
+    }
 
 
 def hourly_periods(days: int, start: dt.datetime | None = None) -> Iterable[tuple[dt.datetime, dt.datetime]]:
