@@ -8,10 +8,12 @@ Run:
 """
 from __future__ import annotations
 
+import base64
+import hmac
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -42,6 +44,42 @@ app = FastAPI(
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 if os.path.isdir(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+# --- Optional HTTP Basic Auth gate -----------------------------------------
+# OFF by default (local dev + docker stack unaffected). ON when BASIC_AUTH_USER
+# and BASIC_AUTH_PASS are both set in the environment. This keeps the
+# bank-branded (synthetic) console off the open internet for any sharing path
+# — CloudFront, a tunnel, or a directly-exposed port. CloudFront also enforces
+# Basic Auth at the edge; this app-layer gate is defence-in-depth and means a
+# misconfigured origin SG can't leak an unauthenticated console.
+_BA_USER = os.environ.get("BASIC_AUTH_USER", "")
+_BA_PASS = os.environ.get("BASIC_AUTH_PASS", "")
+_BA_ENABLED = bool(_BA_USER and _BA_PASS)
+# /healthz is exempt so load-balancer / CloudFront health checks still pass.
+_BA_EXEMPT = {"/healthz"}
+
+
+@app.middleware("http")
+async def _basic_auth(request: Request, call_next):
+    if not _BA_ENABLED or request.url.path in _BA_EXEMPT:
+        return await call_next(request)
+    header = request.headers.get("authorization", "")
+    if header.startswith("Basic "):
+        try:
+            raw = base64.b64decode(header[6:]).decode("utf-8", "replace")
+            user, _, pwd = raw.partition(":")
+            # constant-time compare on both fields (avoid timing oracle)
+            if hmac.compare_digest(user, _BA_USER) and hmac.compare_digest(pwd, _BA_PASS):
+                return await call_next(request)
+        except Exception:
+            pass
+    return Response(
+        "Authentication required.",
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="ENBD FinOps PoC (synthetic)"'},
+    )
+
 
 app.include_router(ai_router)
 app.include_router(connect_router)
