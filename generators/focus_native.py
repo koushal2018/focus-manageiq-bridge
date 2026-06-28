@@ -52,6 +52,37 @@ def _period(day: dt.date) -> tuple[str, str, str, str]:
     return bp_start.isoformat(), bp_end.isoformat(), cp_start.isoformat(), cp_end.isoformat()
 
 
+def _non_usage_rows(rng, account_id, account_name, bps, bpe, cps, cpe,
+                    provider_name, issuer, currency, x_extra):
+    """The charge categories real exports carry beyond Usage: a monthly Tax
+    line, a commitment Purchase, a Credit, and a Refund. Small, fixed set per
+    day — scaled by the caller. `x_extra` is the provider x_ dict to merge."""
+    out = []
+    specs = [
+        ("Tax",      "Management and Governance", "VAT on cloud services", 12.50),
+        ("Purchase", "Compute",                   "Compute Savings Plan (1yr, no upfront)", 240.00),
+        ("Credit",   "Other",                     "Promotional credit", -35.00),
+        ("Refund",   "Compute",                   "Refund — overcharge correction", -8.75),
+    ]
+    for cat, svc_cat, desc, amount in specs:
+        r = _base_row()
+        r.update({
+            "BillingAccountId": account_id, "BillingAccountName": account_name,
+            "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
+            "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
+            "ChargeCategory": cat, "ChargeDescription": desc,
+            "BilledCost": amount, "EffectiveCost": amount,
+            "ListCost": amount, "ContractedCost": amount,
+            "BillingCurrency": currency, "PricingCurrency": "USD",
+            "ServiceProviderName": provider_name, "InvoiceIssuerName": issuer,
+            "ServiceCategory": svc_cat, "ServiceName": "Account-level charge",
+            "ChargeFrequency": "One-Time" if cat in ("Credit", "Refund") else "Recurring",
+        })
+        r.update(x_extra)
+        out.append(r)
+    return out
+
+
 # ----------------------------------------------------------------------
 # AWS native FOCUS 1.2
 # ----------------------------------------------------------------------
@@ -66,31 +97,41 @@ def generate_aws(days: int = 3) -> tuple[list[dict], list[str]]:
         day = start + dt.timedelta(days=d)
         bps, bpe, cps, cpe = _period(day)
         for wl in aws_wls:
-            r = _base_row()
-            cost = round(24 * (0.05 * wl.cpu_cores) + rng.uniform(-0.1, 0.1), 6)
-            r.update({
-                "BillingAccountId": common.FAKE_AWS_ACCOUNT_ID,
-                "BillingAccountName": "DEMO-ENBD-AWS",
-                "SubAccountId": common.FAKE_AWS_ACCOUNT_ID,
-                "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
-                "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
-                "ChargeCategory": "Usage", "ChargeClass": "",
-                "ChargeDescription": f"EC2 demo.{wl.cpu_cores}xlarge",
-                "BilledCost": cost, "EffectiveCost": cost, "ListCost": cost, "ContractedCost": cost,
-                "BillingCurrency": "USD", "PricingCurrency": "USD",
-                "ServiceProviderName": "AWS", "InvoiceIssuerName": "Amazon Web Services, Inc.",
-                "ServiceCategory": "Compute", "ServiceName": "Amazon Elastic Compute Cloud",
-                "SkuId": f"demo.{wl.cpu_cores}xlarge", "SkuMeter": "BoxUsage",
-                "ResourceId": wl.aws_instance_id,          # J-1: AWS joins on instance id
-                "ResourceName": wl.name_in_provider("aws"),
-                "ResourceType": "Instance",
-                "RegionId": "me-central-1", "RegionName": "Middle East (UAE)",
-                "ConsumedQuantity": 24, "ConsumedUnit": "Hrs",
-                "PricingQuantity": 24, "PricingUnit": "Hrs",
-                "Tags": json.dumps(wl.tags, separators=(",", ":")),
-                "x_Discounts": "0", "x_Operation": "RunInstances", "x_ServiceCode": "AmazonEC2",
-            })
-            rows.append(r)
+            for _ in range(common.gen_scale()):
+                sub = rng.choice(common.SUB_ACCOUNTS["aws"])
+                cost = round(24 * (0.05 * wl.cpu_cores) + rng.uniform(-0.1, 0.1), 6)
+                cid, cstatus = common.commitment_fields(rng)
+                eff, lst, con = common.effective_spread(rng, cost, bool(cid))
+                r = _base_row()
+                r.update({
+                    "BillingAccountId": common.FAKE_AWS_ACCOUNT_ID,
+                    "BillingAccountName": "DEMO-ENBD-AWS",
+                    "SubAccountId": sub, "SubAccountName": sub,
+                    "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
+                    "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
+                    "ChargeCategory": "Usage", "ChargeClass": "",
+                    "ChargeDescription": f"EC2 demo.{wl.cpu_cores}xlarge",
+                    "BilledCost": cost, "EffectiveCost": eff, "ListCost": lst, "ContractedCost": con,
+                    "BillingCurrency": "USD", "PricingCurrency": "USD",
+                    "ServiceProviderName": "AWS", "InvoiceIssuerName": "Amazon Web Services, Inc.",
+                    "ServiceCategory": "Compute", "ServiceName": "Amazon Elastic Compute Cloud",
+                    "SkuId": f"demo.{wl.cpu_cores}xlarge", "SkuMeter": "BoxUsage",
+                    "ResourceId": wl.aws_instance_id,
+                    "ResourceName": wl.name_in_provider("aws"),
+                    "ResourceType": "Instance",
+                    "RegionId": "me-central-1", "RegionName": "Middle East (UAE)",
+                    "ConsumedQuantity": 24, "ConsumedUnit": "Hrs",
+                    "PricingQuantity": 24, "PricingUnit": "Hrs",
+                    "Tags": common.tag_sparsity(rng, wl.tags),
+                    "CommitmentDiscountId": cid, "CommitmentDiscountStatus": cstatus,
+                    "x_Discounts": "0", "x_Operation": "RunInstances", "x_ServiceCode": "AmazonEC2",
+                })
+                rows.append(r)
+        # account-level non-usage charges (Tax/Purchase/Credit/Refund)
+        rows.extend(_non_usage_rows(
+            rng, common.FAKE_AWS_ACCOUNT_ID, "DEMO-ENBD-AWS", bps, bpe, cps, cpe,
+            "AWS", "Amazon Web Services, Inc.", "USD",
+            {"x_Discounts": "0", "x_Operation": "", "x_ServiceCode": "AccountCharge"}))
 
     # Bedrock per-model AI rows (requirement #1) — native FOCUS shape.
     # Spread daily AI usage across the window so AI cost scales with `days`.
@@ -156,35 +197,44 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
         day = start + dt.timedelta(days=d)
         bps, bpe, cps, cpe = _period(day)
         for wl in az_wls:
-            arm = wl.azure_resource_id or ""
-            rg = arm.split("/resourceGroups/")[1].split("/")[0] if "/resourceGroups/" in arm else ""
-            r = _base_row()
-            cost_usd = round(24 * (1.2 * wl.cpu_cores / 24) + rng.uniform(-0.1, 0.1), 6)
-            r.update({
-                "BillingAccountId": common.FAKE_AZURE_SUBSCRIPTION,
-                "BillingAccountName": "DEMO-ENBD-Azure",
-                "SubAccountId": rg, "SubAccountName": rg,
-                "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
-                "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
-                "ChargeCategory": "Usage",
-                "ChargeDescription": f"Virtual Machines D{wl.cpu_cores}s v3",
-                # Azure reports billing (AED) + pricing (USD) — mixed currency.
-                "BilledCost": common.usd_to_aed(cost_usd), "EffectiveCost": common.usd_to_aed(cost_usd),
-                "ListCost": cost_usd, "ContractedCost": common.usd_to_aed(cost_usd),
-                "BillingCurrency": "AED", "PricingCurrency": "USD",
-                "ServiceProviderName": "Microsoft", "InvoiceIssuerName": "Microsoft",
-                "ServiceCategory": "Compute", "ServiceName": "Virtual Machines",
-                "SkuMeter": f"D{wl.cpu_cores}s v3",
-                "ResourceId": arm,                          # J-1: Azure joins on ARM path
-                "ResourceName": arm.split("/")[-1],
-                "ResourceType": "Microsoft.Compute/virtualMachines",
-                "RegionId": "uaenorth", "RegionName": "UAE North",
-                "ConsumedQuantity": 24, "ConsumedUnit": "Hour",
-                "PricingQuantity": 24, "PricingUnit": "Hour",
-                "Tags": json.dumps(wl.tags, separators=(",", ":")),
-                "x_SkuMeterId": "demo-meter-0000", "x_ResourceGroupName": rg,
-            })
-            rows.append(r)
+            for _ in range(common.gen_scale()):
+                sub = rng.choice(common.SUB_ACCOUNTS["azure"])
+                arm = wl.azure_resource_id or ""
+                rg = arm.split("/resourceGroups/")[1].split("/")[0] if "/resourceGroups/" in arm else ""
+                r = _base_row()
+                cost_usd = round(24 * (1.2 * wl.cpu_cores / 24) + rng.uniform(-0.1, 0.1), 6)
+                billed_aed = common.usd_to_aed(cost_usd)
+                cid, cstatus = common.commitment_fields(rng)
+                eff, lst, con = common.effective_spread(rng, billed_aed, bool(cid))
+                r.update({
+                    "BillingAccountId": common.FAKE_AZURE_SUBSCRIPTION,
+                    "BillingAccountName": "DEMO-ENBD-Azure",
+                    "SubAccountId": sub, "SubAccountName": sub,
+                    "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
+                    "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
+                    "ChargeCategory": "Usage",
+                    "ChargeDescription": f"Virtual Machines D{wl.cpu_cores}s v3",
+                    "BilledCost": billed_aed, "EffectiveCost": eff, "ListCost": lst, "ContractedCost": con,
+                    "BillingCurrency": "AED", "PricingCurrency": "USD",
+                    "ServiceProviderName": "Microsoft", "InvoiceIssuerName": "Microsoft",
+                    "ServiceCategory": "Compute", "ServiceName": "Virtual Machines",
+                    "SkuMeter": f"D{wl.cpu_cores}s v3",
+                    "ResourceId": arm,
+                    "ResourceName": arm.split("/")[-1],
+                    "ResourceType": "Microsoft.Compute/virtualMachines",
+                    "RegionId": "uaenorth", "RegionName": "UAE North",
+                    "ConsumedQuantity": 24, "ConsumedUnit": "Hour",
+                    "PricingQuantity": 24, "PricingUnit": "Hour",
+                    "Tags": common.tag_sparsity(rng, wl.tags),
+                    "CommitmentDiscountId": cid, "CommitmentDiscountStatus": cstatus,
+                    "x_SkuMeterId": "demo-meter-0000", "x_ResourceGroupName": rg,
+                })
+                rows.append(r)
+        # account-level non-usage charges (Tax/Purchase/Credit/Refund)
+        rows.extend(_non_usage_rows(
+            rng, common.FAKE_AZURE_SUBSCRIPTION, "DEMO-ENBD-Azure", bps, bpe, cps, cpe,
+            "Microsoft", "Microsoft", "AED",
+            {"x_SkuMeterId": "", "x_ResourceGroupName": ""}))
 
     # Azure OpenAI AI rows — spread across the window (parity with Bedrock).
     for d in range(days):
@@ -231,29 +281,39 @@ def generate_oci(days: int = 3) -> tuple[list[dict], list[str]]:
         day = start + dt.timedelta(days=d)
         bps, bpe, cps, cpe = _period(day)
         for wl in oci_wls:
-            r = _base_row()
-            cost = round(24 * (0.04 * wl.cpu_cores) + rng.uniform(-0.05, 0.05), 6)
-            r.update({
-                "BillingAccountId": common.FAKE_OCI_TENANCY,
-                "BillingAccountName": "DEMO-OCI-Tenancy",
-                "SubAccountId": "Analytics", "SubAccountName": "Analytics",
-                "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
-                "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
-                "ChargeCategory": "Usage", "ChargeDescription": "Compute VM.Standard",
-                "BilledCost": cost, "EffectiveCost": cost, "ListCost": cost, "ContractedCost": cost,
-                "BillingCurrency": "USD", "PricingCurrency": "USD",
-                "ServiceProviderName": "Oracle Cloud Infrastructure", "InvoiceIssuerName": "Oracle",
-                "ServiceCategory": "Compute", "ServiceName": "Compute",
-                "SkuId": "B91449", "SkuMeter": "VM.Standard",
-                "ResourceId": wl.oci_resource_id,           # J-1: OCI joins on OCID
-                "ResourceName": wl.name_in_provider("oci"), "ResourceType": "Instance",
-                "RegionId": "me-dubai-1", "RegionName": "UAE Central (Dubai)",
-                "ConsumedQuantity": 24, "ConsumedUnit": "Hours",
-                "PricingQuantity": 24, "PricingUnit": "Hours",
-                "Tags": json.dumps(wl.tags, separators=(",", ":")),
-                "x_CompartmentId": "ocid1.compartment.oc1..demoanalytics",
-            })
-            rows.append(r)
+            for _ in range(common.gen_scale()):
+                sub = rng.choice(common.SUB_ACCOUNTS["oci"])
+                cost = round(24 * (0.04 * wl.cpu_cores) + rng.uniform(-0.05, 0.05), 6)
+                cid, cstatus = common.commitment_fields(rng)
+                eff, lst, con = common.effective_spread(rng, cost, bool(cid))
+                r = _base_row()
+                r.update({
+                    "BillingAccountId": common.FAKE_OCI_TENANCY,
+                    "BillingAccountName": "DEMO-OCI-Tenancy",
+                    "SubAccountId": sub, "SubAccountName": sub,
+                    "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
+                    "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
+                    "ChargeCategory": "Usage", "ChargeDescription": "Compute VM.Standard",
+                    "BilledCost": cost, "EffectiveCost": eff, "ListCost": lst, "ContractedCost": con,
+                    "BillingCurrency": "USD", "PricingCurrency": "USD",
+                    "ServiceProviderName": "Oracle Cloud Infrastructure", "InvoiceIssuerName": "Oracle",
+                    "ServiceCategory": "Compute", "ServiceName": "Compute",
+                    "SkuId": "B91449", "SkuMeter": "VM.Standard",
+                    "ResourceId": wl.oci_resource_id,
+                    "ResourceName": wl.name_in_provider("oci"), "ResourceType": "Instance",
+                    "RegionId": "me-dubai-1", "RegionName": "UAE Central (Dubai)",
+                    "ConsumedQuantity": 24, "ConsumedUnit": "Hours",
+                    "PricingQuantity": 24, "PricingUnit": "Hours",
+                    "Tags": common.tag_sparsity(rng, wl.tags),
+                    "CommitmentDiscountId": cid, "CommitmentDiscountStatus": cstatus,
+                    "x_CompartmentId": "ocid1.compartment.oc1..demoanalytics",
+                })
+                rows.append(r)
+        # account-level non-usage charges (Tax/Purchase/Credit/Refund)
+        rows.extend(_non_usage_rows(
+            rng, common.FAKE_OCI_TENANCY, "DEMO-OCI-Tenancy", bps, bpe, cps, cpe,
+            "Oracle Cloud Infrastructure", "Oracle", "USD",
+            {"x_CompartmentId": ""}))
 
     # OCI generative-AI rows (per-model) — spread across the window.
     for d in range(days):
