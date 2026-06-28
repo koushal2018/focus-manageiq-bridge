@@ -15,7 +15,9 @@ HEADER = ("ServiceCategory,BillingCurrency,BilledCost,ChargePeriodStart,"
           "ServiceProviderName,ResourceId\n")
 
 
-def test_upload_rejects_non_focus():
+def test_upload_rejects_non_focus(tmp_path, monkeypatch):
+    # Isolate registry to avoid writing to shared sources.json
+    monkeypatch.setattr("connectors.registry.REGISTRY_PATH", str(tmp_path / "sources.json"))
     bad = io.BytesIO(b"not,a,focus\n1,2,3\n")
     r = client.post("/connect/upload",
                     data={"source_id": "test-upload-bad"},
@@ -27,6 +29,10 @@ def test_upload_rejects_non_focus():
 def test_upload_accepts_focus(tmp_path, monkeypatch):
     from connectors import adapters
     monkeypatch.setattr(adapters, "UPLOAD_ROOT", str(tmp_path))
+    # Stub the load pipeline so it doesn't touch the real DB
+    monkeypatch.setattr("connectors.router._load_and_join", lambda: None)
+    # Isolate the registry so it doesn't write the shared sources.json
+    monkeypatch.setattr("connectors.registry.REGISTRY_PATH", str(tmp_path / "sources.json"))
     good = io.BytesIO((HEADER + "Compute,USD,1.5,2026-06-01T00:00:00+00:00,AWS,i-demo\n").encode())
     r = client.post("/connect/upload",
                     data={"source_id": "test-upload-ok"},
