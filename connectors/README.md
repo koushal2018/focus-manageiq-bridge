@@ -96,9 +96,10 @@ After successfully loading an export, the adapter should advance its watermark (
 2. **Set `r["_source"]`** to a short provider tag (`"aws"`, `"azure"`, `"oci"`, `"upload"`). The loader writes this to the `_source` column for origin tracking.
 3. **Return a `NormalizeResult`** with `focus_rows` (the mapped rows) and `report` (the conformance report from the normalizer).
 
-Example (minimal adapter reading a local CSV, mirroring `UploadSource`):
+Example (minimal adapter reading a local CSV, based on the `UploadSource` pattern):
 
 ```python
+import os
 from connectors.contract import DiscoveredExport, NormalizeResult, SourceConfig
 from normalizer import focus_native_to_focus
 
