@@ -92,6 +92,11 @@ CREATE TABLE focus_costs (
     -- Tags as a JSON blob (Azure/AWS/OCI all hand us these differently)
     tags                    JSONB,                         -- Tags
 
+    -- Commitment discount identity (Savings Plans / Reserved / OCI commitments).
+    -- Why EffectiveCost can diverge from BilledCost/ListCost (FinOps coverage story).
+    commitment_discount_id      TEXT,                          -- CommitmentDiscountId
+    commitment_discount_status  TEXT,                          -- CommitmentDiscountStatus
+
     -- Provider x_ extension columns preserved as JSONB (GOTCHA H-9) — e.g.
     -- AWS x_Discounts/x_Operation/x_ServiceCode. Portable FOCUS consumers
     -- ignore it; AWS-specific analysis can read it.

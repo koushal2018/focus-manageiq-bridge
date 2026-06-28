@@ -88,6 +88,8 @@ FOCUS_CSV_TO_DB_COLUMN = {
     "PricingQuantity": "pricing_quantity",
     "PricingUnit": "pricing_unit",
     "Tags": "tags",
+    "CommitmentDiscountId": "commitment_discount_id",
+    "CommitmentDiscountStatus": "commitment_discount_status",
 }
 
 JOIN_CSV_TO_DB_COLUMN = {
