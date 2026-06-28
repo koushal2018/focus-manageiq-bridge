@@ -73,3 +73,24 @@ def test_upload_rejects_oversize(tmp_path, monkeypatch):
                     files={"file": ("big.csv", big, "text/csv")})
     assert r.status_code == 413
     assert "limit" in r.json()["error"].lower()
+
+
+def test_add_rejects_location_traversal(tmp_path, monkeypatch):
+    # SEC-2: /connect/add `location` is read off disk by file adapters — an
+    # absolute path or '..' traversal would be an arbitrary-file-READ primitive.
+    monkeypatch.setattr("connectors.registry.REGISTRY_PATH", str(tmp_path / "sources.json"))
+    r = client.post("/connect/add", json={
+        "source_type": "aws-focus-export", "source_id": "evil-loc",
+        "location": "../../../../etc/passwd"})
+    assert r.status_code == 400
+    assert "location" in r.json()["error"]
+
+
+def test_add_rejects_bad_source_id(tmp_path, monkeypatch):
+    # SEC-1 also guards /connect/add (not just upload).
+    monkeypatch.setattr("connectors.registry.REGISTRY_PATH", str(tmp_path / "sources.json"))
+    r = client.post("/connect/add", json={
+        "source_type": "aws-focus-export", "source_id": "../escape",
+        "location": "out/generators/focus_aws.csv"})
+    assert r.status_code == 400
+    assert "source_id" in r.json()["error"]

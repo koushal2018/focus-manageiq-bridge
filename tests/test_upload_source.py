@@ -37,20 +37,35 @@ def test_registered_in_adapters():
     assert adapters.ADAPTERS["upload-focus"].source_type == "upload-focus"
 
 
-def test_discover_honors_watermark(tmp_path, monkeypatch):
-    import time
+def test_discover_dedupes_by_content_hash(tmp_path, monkeypatch):
     monkeypatch.setattr(adapters, "UPLOAD_ROOT", str(tmp_path))
     d = adapters.inbox_dir("src-wm")
-    # first file, then advance the watermark past it
+    src = adapters.UploadSource()
     with open(os.path.join(d, "first.csv"), "w") as f:
         f.write("ServiceCategory,BillingCurrency\nCompute,USD\n")
-    src = adapters.UploadSource()
+    # first discover sees it; then mark ingested
+    assert len(src.discover(_cfg("src-wm"))) == 1
     src.advance_watermark(_cfg("src-wm"))
-    # the already-seen file must NOT be rediscovered
+    # already-ingested content is NOT rediscovered
     assert src.discover(_cfg("src-wm")) == []
-    # a NEW file written after the watermark IS discovered
-    time.sleep(0.01)
+    # a DIFFERENT-CONTENT file IS discovered (distinct hash)
     with open(os.path.join(d, "second.csv"), "w") as f:
-        f.write("ServiceCategory,BillingCurrency\nCompute,USD\n")
+        f.write("ServiceCategory,BillingCurrency\nStorage,USD\n")
     found = src.discover(_cfg("src-wm"))
     assert len(found) == 1 and found[0].export_id == "second.csv"
+
+
+def test_discover_identical_content_is_noop(tmp_path, monkeypatch):
+    # Re-uploading byte-identical content under a new name must NOT re-ingest
+    # (an mtime watermark would have re-ingested it; content-hash does not).
+    monkeypatch.setattr(adapters, "UPLOAD_ROOT", str(tmp_path))
+    d = adapters.inbox_dir("src-dup")
+    src = adapters.UploadSource()
+    body = "ServiceCategory,BillingCurrency\nCompute,USD\n"
+    with open(os.path.join(d, "a.csv"), "w") as f:
+        f.write(body)
+    assert len(src.discover(_cfg("src-dup"))) == 1
+    src.advance_watermark(_cfg("src-dup"))
+    with open(os.path.join(d, "b.csv"), "w") as f:  # same bytes, new name
+        f.write(body)
+    assert src.discover(_cfg("src-dup")) == []  # identical content → no-op

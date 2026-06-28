@@ -52,6 +52,20 @@ def _valid_source_id(sid: str) -> bool:
     return bool(_SAFE_SOURCE_ID.match(sid))
 
 
+_PROJECT_ROOT = os.path.dirname(THIS_DIR)
+
+
+def _location_within_root(location: str) -> bool:
+    """A source `location` (file-based adapters read it under the project root)
+    must resolve to a path INSIDE the project tree — reject absolute paths and
+    `..` traversal so it can't be an arbitrary-file-read primitive (SEC-2)."""
+    if not location or os.path.isabs(location):
+        return False
+    resolved = os.path.realpath(os.path.join(_PROJECT_ROOT, location))
+    root = os.path.realpath(_PROJECT_ROOT)
+    return resolved == root or resolved.startswith(root + os.sep)
+
+
 def _rebuild_join_and_onprem(root: str) -> None:
     """Rebuild the DERIVED resource_join_map from the FULL focus_costs table
     (the join must see every source, not just the one just loaded) and refresh
@@ -177,11 +191,24 @@ def connect_add(body: dict):
              f"available: {sorted(ADAPTERS.keys())}"}, status_code=400)
     if not source_id:
         return JSONResponse({"ok": False, "error": "source_id is required"}, status_code=400)
+    if not _valid_source_id(source_id):
+        return JSONResponse(
+            {"ok": False, "error": "source_id must be 1–128 chars of letters, "
+             "digits, dot, underscore or hyphen (no path separators)"},
+            status_code=400)
     if not location:
         # default to the synthetic export for this type so the demo flows
         location = DEMO_LOCATIONS.get(source_type, "")
         if not location:
             return JSONResponse({"ok": False, "error": "location is required"}, status_code=400)
+    # The file-based adapters resolve `location` under the project root and read
+    # it (connectors.adapters._local_export). A traversal/absolute path would be
+    # an arbitrary-file-READ primitive (info disclosure), the read-side twin of
+    # SEC-1. Constrain it to stay inside the project tree. (GOTCHA SEC-2.)
+    if not _location_within_root(location):
+        return JSONResponse(
+            {"ok": False, "error": "location must be a path inside the project "
+             "data tree (no absolute paths or '..' traversal)"}, status_code=400)
 
     registry.add_source(SourceConfig(
         source_id=source_id,
@@ -274,8 +301,6 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
 @router.post("/remove")
 def connect_remove(body: dict):
     source_id = (body.get("source_id") or "").strip()
-    current = registry.load()
-    kept = [s for s in current if s.source_id != source_id]
-    registry.save(kept)
+    registry.remove_source(source_id)   # locked read-modify-write (no race)
     result = dispatcher.run()
     return {"ok": True, "dispatch": result, "sources": _sources_view()}

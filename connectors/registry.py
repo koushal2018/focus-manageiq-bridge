@@ -74,6 +74,32 @@ def _from_dict(d: dict) -> SourceConfig:
     )
 
 
+import contextlib
+import fcntl
+import tempfile
+
+
+@contextlib.contextmanager
+def _registry_lock():
+    """Advisory exclusive lock for read-modify-write of the registry.
+
+    The registry is a shared JSON file; `add_source`/`remove` are
+    read-modify-write, so two concurrent requests would lose an update
+    (classic race). An flock on a sidecar `.lock` serializes them. POSIX
+    advisory lock — fine for the single-host container; a multi-replica
+    deployment would move the registry to a DB row with a transaction
+    (Spec 4). Lock is held only for the brief mutate, never across I/O."""
+    os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
+    lock_path = REGISTRY_PATH + ".lock"
+    f = open(lock_path, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
+
 def load() -> list[SourceConfig]:
     """Read the registry. If absent, seed it with the PoC sources and persist."""
     if not os.path.exists(REGISTRY_PATH):
@@ -84,14 +110,35 @@ def load() -> list[SourceConfig]:
 
 
 def save(sources: list[SourceConfig]) -> None:
+    """Atomic write: serialize to a temp file in the same dir, then os.replace
+    (atomic rename on POSIX) so a crash mid-write can never leave a truncated /
+    corrupt registry — the old file stays intact until the new one is complete."""
     os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
-    with open(REGISTRY_PATH, "w") as f:
-        json.dump([_to_dict(c) for c in sources], f, indent=2)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(REGISTRY_PATH), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump([_to_dict(c) for c in sources], f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, REGISTRY_PATH)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def add_source(cfg: SourceConfig) -> None:
-    """What the admin UI's 'Connect a source' button calls."""
-    current = load()
-    current = [c for c in current if c.source_id != cfg.source_id]  # upsert
-    current.append(cfg)
-    save(current)
+    """What the admin UI's 'Connect a source' button calls. Locked
+    read-modify-write so concurrent registrations don't lose each other."""
+    with _registry_lock():
+        current = load()
+        current = [c for c in current if c.source_id != cfg.source_id]  # upsert
+        current.append(cfg)
+        save(current)
+
+
+def remove_source(source_id: str) -> None:
+    """Locked removal — mirror of add_source so the two can't race."""
+    with _registry_lock():
+        current = [c for c in load() if c.source_id != source_id]
+        save(current)

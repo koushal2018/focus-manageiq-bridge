@@ -46,32 +46,69 @@ def inbox_dir(source_id: str) -> str:
     return d
 
 
+def _sha256_file(path: str) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 class UploadSource:
     """A source whose exports arrive by user upload, not cloud fetch. discover()
-    lists *.csv in the source's inbox newer than the watermark; normalize() is
-    the same native-FOCUS mapping every other source uses — the only difference
-    from a future S3 source is WHERE the bytes came from."""
+    lists *.csv in the source's inbox that have NOT been ingested before;
+    normalize() is the same native-FOCUS mapping every other source uses — the
+    only difference from a future S3 source is WHERE the bytes came from.
+
+    Dedupe is by CONTENT HASH, not mtime: a `.ingested` sidecar in the inbox
+    records the sha256 of every file already ingested. This is robust to the
+    mtime pitfalls (1–2s filesystem resolution, clock skew / NTP correction,
+    same-name re-uploads) that an mtime watermark silently mis-handles, and it
+    means re-uploading byte-identical content is correctly a no-op while a
+    CHANGED file with the same name is re-ingested (its hash differs)."""
     source_type = "upload-focus"
+
+    def _ingested_path(self, source_id: str) -> str:
+        return os.path.join(inbox_dir(source_id), ".ingested")
+
+    def _ingested_hashes(self, source_id: str) -> set[str]:
+        import json
+        p = self._ingested_path(source_id)
+        if not os.path.exists(p):
+            return set()
+        try:
+            with open(p) as f:
+                return set(json.load(f))
+        except (ValueError, OSError):
+            return set()
 
     def discover(self, cfg: SourceConfig) -> list[DiscoveredExport]:
         d = inbox_dir(cfg.source_id)
-        wm_path = os.path.join(d, ".watermark")
-        watermark = os.path.getmtime(wm_path) if os.path.exists(wm_path) else 0.0
+        seen = self._ingested_hashes(cfg.source_id)
         found = []
         for name in sorted(os.listdir(d)):
             if not name.endswith(".csv"):
                 continue
             p = os.path.join(d, name)
-            if os.path.getmtime(p) <= watermark:
-                continue  # already ingested in a prior run
+            if _sha256_file(p) in seen:
+                continue  # byte-identical content already ingested
             found.append(DiscoveredExport(source_id=cfg.source_id,
                                           export_id=name, uri=p))
         return found
 
     def advance_watermark(self, cfg: SourceConfig) -> None:
-        """Touch the watermark so already-seen files aren't re-ingested."""
+        """Record the content hash of every current *.csv as ingested, so
+        identical content isn't re-ingested on the next dispatch. (Name kept
+        for back-compat with the route handler; it now persists hashes.)"""
+        import json
         d = inbox_dir(cfg.source_id)
-        open(os.path.join(d, ".watermark"), "w").close()
+        seen = self._ingested_hashes(cfg.source_id)
+        for name in os.listdir(d):
+            if name.endswith(".csv"):
+                seen.add(_sha256_file(os.path.join(d, name)))
+        with open(self._ingested_path(cfg.source_id), "w") as f:
+            json.dump(sorted(seen), f)
 
     def normalize(self, cfg: SourceConfig, export: DiscoveredExport) -> NormalizeResult:
         rows, report = focus_native_to_focus.normalize_csv(export.uri)
