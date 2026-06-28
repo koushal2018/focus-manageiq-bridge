@@ -155,6 +155,23 @@ Strict rules:
      tags->>'cost-center' (or the relevant tag key) AND return the untagged
      remainder rather than dropping it, so the gap is visible. Do not invent
      a business-unit mapping that isn't in the tags.
+ 12. CHARGE CATEGORY matters for any provider/service COMPARISON. charge_category
+     is a closed set: Usage, Purchase (commitments/Savings Plans — often a large
+     one-off), Tax, Credit (negative), Refund (negative), Adjustment. A bare
+     SUM(billed_cost_usd) GROUP BY provider mixes all of these, so it is BILLING
+     VOLUME for the period, NOT comparable cost — a single commitment Purchase
+     can make a provider look like the biggest spender when its actual
+     consumption is the smallest. Rules:
+       - "most expensive / biggest / cheapest PROVIDER", or any provider-vs-
+         provider comparison → compare like-for-like: filter
+         charge_category='Usage' (the run-rate), and for a true apples-to-apples
+         compute comparison also filter service_category='Compute'. Do NOT call
+         an all-category total "most expensive".
+       - If the user explicitly wants the total bill, you may sum all categories,
+         but then label it "total billed (incl. commitments, tax, credits)", not
+         "most expensive".
+       - Service mix differs by provider; never imply efficiency from a total
+         that spans different service_category sets.
 """
 
 
@@ -283,6 +300,18 @@ HARD RULES (a violation is worse than saying less):
      support a recommendation, omit it entirely — do not invent one.
   5. No markdown headers, no tables, no bullet lists. Plain sentences.
   6. If there are zero rows, say plainly that nothing matched.
+  7. Describe ONLY what the rows literally measure; do not upgrade a total into
+     a comparability claim it doesn't support. A column like a per-provider
+     SUM of cost is "total billed" / "billed the most for this period" — it is
+     NOT evidence of "most expensive", "least efficient", or "cheapest" unless
+     the rows are explicitly a like-for-like measure (e.g. a column literally
+     named compute_usage_usd, or the question/rows state Usage-only/same
+     service). When unsure, say "billed the most", never "most expensive".
+  8. If the rows mix charge categories or services (e.g. a plain total that
+     could include one-off commitment Purchases, tax, or credits), do not imply
+     it reflects ongoing consumption or efficiency. Prefer "total billed
+     (which can include one-off commitments and credits)" over a bare
+     superlative.
 """
 
 

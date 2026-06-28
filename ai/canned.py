@@ -36,6 +36,25 @@ QUERIES: dict[str, CannedQuery] = {
             ORDER  BY total_usd DESC
         """,
     ),
+    "compute_cost_by_provider": CannedQuery(
+        name="compute_cost_by_provider",
+        description=(
+            "LIKE-FOR-LIKE compute comparison: Compute *Usage* spend (USD) by "
+            "provider. Excludes commitment Purchases, Tax, Credits and Refunds "
+            "and non-compute services, so the providers are actually comparable "
+            "— a raw all-category total is billing volume, not comparable cost."
+        ),
+        sql="""
+            SELECT service_provider_name,
+                   SUM(billed_cost_usd)::NUMERIC(12,2) AS compute_usage_usd,
+                   COUNT(*)                            AS row_count
+            FROM   focus_costs
+            WHERE  service_category = 'Compute'
+              AND  charge_category  = 'Usage'
+            GROUP  BY service_provider_name
+            ORDER  BY compute_usage_usd DESC
+        """,
+    ),
     "ai_cost_by_model": CannedQuery(
         name="ai_cost_by_model",
         description="AI/ML cost (USD) grouped by the model id captured in SkuMeter.",
