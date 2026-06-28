@@ -60,6 +60,7 @@ services:
       # static keys baked in. AWS_REGION set so the SDK has a default.
       AWS_REGION: ${BEDROCK_REGION:-us-east-1}
       SEED_ON_START: "1"
+      FOCUS_GEN_SCALE: ${FOCUS_GEN_SCALE:-8}
     ports:
       - "${WEB_PORT:-8000}:8000"
     restart: unless-stopped

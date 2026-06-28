@@ -69,3 +69,25 @@ def test_conformance_report_passes():
     from web import queries
     c = queries.focus_conformance()
     assert c["conformant"], f"{c['total_fail_rows']} rows failed conformance"
+
+
+def test_charge_category_mix_loaded():
+    """Realistic data carries more than Usage — Tax/Purchase/Credit/Refund
+    must survive ingestion into focus_costs."""
+    db = _db_or_skip()
+    cats = {r["c"] for r in db.query(
+        "SELECT DISTINCT charge_category AS c FROM focus_costs "
+        "WHERE charge_category IS NOT NULL")}
+    assert {"Usage", "Tax", "Purchase"} <= cats, f"charge categories loaded: {cats}"
+
+
+def test_commitment_rows_have_effective_below_billed():
+    """Commitment coverage means EffectiveCost < BilledCost for covered rows
+    (in USD, so the comparison is currency-safe)."""
+    db = _db_or_skip()
+    n = db.query("""
+        SELECT COUNT(*) AS n FROM focus_costs
+        WHERE commitment_discount_id IS NOT NULL
+          AND commitment_discount_id <> ''
+          AND effective_cost < billed_cost""")[0]["n"]
+    assert n > 0, "expected commitment-covered rows with EffectiveCost < BilledCost"
