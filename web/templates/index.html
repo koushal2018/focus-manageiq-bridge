@@ -92,9 +92,9 @@
 
 <div class="kpis">
   <div class="kpi">
-    <div class="k">Total billed · all providers</div>
+    <div class="k">Total cost · cloud + on-prem</div>
     <div class="v"><span class="unit">USD</span>{{ "{:,.2f}".format(kpis.total_usd) }}</div>
-    <div class="sub">FOCUS BilledCost + on-prem recharge</div>
+    <div class="sub">cloud {{ "{:,.0f}".format(kpis.cloud_usd) }} (FOCUS) + on-prem {{ "{:,.0f}".format(kpis.onprem_usd) }} (recharge)</div>
   </div>
   <div class="kpi">
     <div class="k">FOCUS rows ingested</div>
