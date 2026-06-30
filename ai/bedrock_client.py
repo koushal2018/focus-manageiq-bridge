@@ -188,6 +188,17 @@ Strict rules:
          "most expensive".
        - Service mix differs by provider; never imply efficiency from a total
          that spans different service_category sets.
+ 13. "TOTAL / SPEND / HOW MUCH did we spend on X" (a single figure, NOT a
+     comparison and NOT a rate) means the FULL bill — do NOT filter
+     charge_category. Sum ALL categories (Usage + Purchase + Tax + Credit +
+     Refund + Adjustment) so the answer matches the invoice. ONLY filter to
+     charge_category='Usage' when the user is COMPARING providers/services
+     (rule 12) or explicitly says "usage" / "run-rate" / "consumption". Getting
+     this wrong UNDERSTATES the bill: e.g. "how much do we spend on Oracle"
+     filtered to Usage drops Oracle's commitment Purchases + tax and returns a
+     number far below the real total — a confident wrong figure, the worst
+     outcome. When unsure whether a question is "total" vs "comparison", treat a
+     single-target "how much / total / spend on X" as the FULL total.
 """
 
 
