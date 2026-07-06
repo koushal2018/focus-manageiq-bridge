@@ -102,12 +102,17 @@
     if (!rows || !rows.length) return '<p class="mono" style="color:var(--ink-dim)">(0 rows)</p>';
     const cols = Object.keys(rows[0]);
     let h = '<table class="data"><thead><tr>';
-    for (const c of cols) h += '<th scope="col">'+c+'</th>';
+    // esc() every column name AND cell value: these are DB values (uploaded
+    // FOCUS text columns are not sanitized at ingest), and this is assigned via
+    // innerHTML, so an unescaped cell is stored XSS in the console session.
+    for (const c of cols) h += '<th scope="col">'+esc(c)+'</th>';
     h += '</tr></thead><tbody>';
-    for (const r of rows) { h += '<tr>'; for (const c of cols) h += '<td class="mono" style="font-size:11.5px">'+(r[c]===null?'<span style="color:var(--ink-faint)">null</span>':String(r[c]))+'</td>'; h += '</tr>'; }
+    for (const r of rows) { h += '<tr>'; for (const c of cols) h += '<td class="mono" style="font-size:11.5px">'+(r[c]===null?'<span style="color:var(--ink-faint)">null</span>':esc(String(r[c])))+'</td>'; h += '</tr>'; }
     return h + '</tbody></table>';
   }
-  function esc(s){ return String(s).replace(/</g,'&lt;'); }
+  // Escape the HTML-significant characters for text-node/attribute-free
+  // insertion. Covers & < > " so a payload like <img onerror> can't break out.
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   // Plain-language answer built ONLY from the returned cells (no second LLM
   // narration), so it can't state a number the query didn't return.
   function fmtCell(col, v){

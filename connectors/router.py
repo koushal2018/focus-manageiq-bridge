@@ -21,9 +21,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from connectors import registry, dispatcher, upload_validate
-from connectors.adapters import ADAPTERS, UploadSource, inbox_dir
+from connectors.adapters import ADAPTERS, inbox_dir
 from connectors.api_pull import API_PULL_TYPES
 from connectors.contract import SourceConfig
+from db.loader import LoadConformanceError as loader_LoadConformanceError
 from web import observability as obs
 
 
@@ -55,6 +56,11 @@ def _source_ingest_lock(source_id: str):
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(os.path.dirname(THIS_DIR), "web", "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
+# This router has its own Jinja env (separate from web/app.py's), so the
+# `tenant` branding global must be installed here too — otherwise _base.html
+# renders /connect with the generic defaults instead of config/tenant.json.
+from web import tenant as _tenant
+templates.env.globals["tenant"] = _tenant.branding()
 
 router = APIRouter(prefix="/connect", tags=["connect"])
 
@@ -140,24 +146,47 @@ def _load_join_only(join_rows) -> None:
         conn.close()
 
 
+class UploadIngestError(Exception):
+    """The dispatch failed for this source (normalize/discover error). Distinct
+    from an empty-but-successful dispatch so the caller can react correctly."""
+
+
+class JoinRebuildError(Exception):
+    """The per-source cost partition COMMITTED, but the subsequent join/onprem
+    rebuild failed. The warehouse is NOT unchanged — the cost partition is
+    updated while the derived join is stale — so the caller must not tell the
+    user 'nothing changed'."""
+
+
 def _ingest_upload(source_id: str) -> dict:
     """Incremental ingest of one uploaded source (W-15): dispatch ONLY this
     source → per-source partition load of focus_costs (no global TRUNCATE) →
-    rebuild the derived join over all sources. Returns the dispatch result."""
+    rebuild the derived join over all sources. Returns the dispatch result.
+
+    discover() returns the WHOLE inbox for an upload source, so the dispatched
+    CSV is the union of every file uploaded to this source; load_source replaces
+    the partition with exactly that. There is therefore no "already ingested"
+    special case — re-dispatching the same inbox reproduces the same partition
+    (idempotent). We DO fail loudly if the dispatch itself errored, so a failed
+    normalize is never mistaken for a successful empty load (which would let the
+    partition-replace wipe good data)."""
     import os
     from db import loader
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     result = dispatcher.run(only_source_id=source_id)
-    # If discover() found nothing new (content-hash dedupe — the file was
-    # already ingested), the dispatched CSV has 0 rows. DO NOT call load_source:
-    # it would DELETE the source's partition and COPY nothing, WIPING the
-    # already-loaded data. A re-load of identical content must be a no-op.
-    if result.get("focus_rows", 0) == 0:
-        result["skipped"] = "no new exports (already ingested) — partition preserved"
-        return result
+    if result.get("errored"):
+        errs = "; ".join(e.get("error", "unknown") for e in result["errored"])
+        raise UploadIngestError(errs or "dispatch failed")
+    # load_source is atomic: on LoadConformanceError it rolls back and the
+    # partition is preserved (nothing changed). Once it returns, the partition
+    # is COMMITTED — a later failure in the join rebuild leaves the cost
+    # partition changed, so it must NOT be reported as "nothing changed".
     loader.load_source(source_id, result["out_csv"])   # may raise LoadConformanceError
-    _rebuild_join_and_onprem(root)
+    try:
+        _rebuild_join_and_onprem(root)
+    except Exception as e:
+        raise JoinRebuildError(str(e)) from e
     return result
 
 
@@ -223,6 +252,15 @@ def connect_add(body: dict, request: Request = None):
         return JSONResponse(
             {"ok": False, "error": f"unknown source_type {source_type!r}; "
              f"available: {sorted(ADAPTERS.keys())}"}, status_code=400)
+    # API-pull types are registered-but-stubbed (discover() raises). The UI
+    # renders them disabled; enforce the same server-side so a stub source can't
+    # be registered (it would only ever fail to dispatch). Belt-and-braces with
+    # the dispatcher's fail-soft, which keeps a stub from sinking a run.
+    if source_type in API_PULL_TYPES:
+        return JSONResponse(
+            {"ok": False, "error": f"source_type {source_type!r} is not yet "
+             "available (API-pull connectors are deferred — use upload)"},
+            status_code=400)
     if not source_id:
         return JSONResponse({"ok": False, "error": "source_id is required"}, status_code=400)
     if not _valid_source_id(source_id):
@@ -310,9 +348,10 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
         basename += ".csv"
     dest = os.path.join(d, basename)
 
-    # Hold a per-source lock across write→ingest→mark so two concurrent uploads
-    # of the SAME source can't interleave (review finding: one marking the
-    # other's file ingested before it loads → silent drop).
+    # Hold a per-source lock across write→ingest so two concurrent uploads of
+    # the SAME source can't interleave. The inbox is the source of truth for the
+    # partition (discover() returns the whole inbox, load replaces the partition
+    # with its union), so there is no separate watermark to mark.
     with _source_ingest_lock(sid):
         with open(dest, "wb") as f:
             f.write(raw)
@@ -320,12 +359,13 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
         # Incremental, per-source ingest (W-15): only THIS source is dispatched
         # and only its partition of focus_costs is replaced — no global
         # TRUNCATE, cost is O(this source). The per-source load is guarded by an
-        # in-txn conformance gate; if this upload's rows would be non-conformant
-        # the partition load ROLLS BACK and every other source is untouched. The
-        # file we wrote is then poison — remove it so it isn't re-ingested.
+        # in-txn conformance gate.
         try:
             result = _ingest_upload(sid)
-        except Exception as e:
+        except (UploadIngestError, loader_LoadConformanceError) as e:
+            # PRE-load failure: the partition rolled back / never changed, so
+            # nothing changed and the just-written file is poison — remove it so
+            # the inbox stays in sync with the preserved partition.
             try:
                 os.remove(dest)
             except OSError:
@@ -336,9 +376,19 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
                 {"ok": False, "error": f"upload rejected at load: {e}. The "
                  "existing data was preserved; nothing was changed."},
                 status_code=422)
-        # Mark ONLY this dispatched file ingested (not the whole inbox).
-        UploadSource().mark_ingested(
-            SourceConfig(sid, "upload-focus", sid, d, "upload", "manual"), [dest])
+        except JoinRebuildError as e:
+            # POST-commit failure: the cost partition IS updated (the file stays
+            # in the inbox, matching the committed partition), but the derived
+            # join is stale. Do NOT claim nothing changed; re-running the ingest
+            # (or a re-seed) rebuilds the join.
+            obs.audit("upload_partial", _rid(request), source_id=sid,
+                      filename=basename, bytes=len(raw), reason=str(e))
+            return JSONResponse(
+                {"ok": False, "error": f"cost data was loaded, but the join/"
+                 f"on-prem rebuild failed: {e}. The cost figures are updated; "
+                 "the resource-join view may be stale until the next ingest.",
+                 "partition_committed": True},
+                status_code=500)
     obs.audit("upload", _rid(request), source_id=sid, filename=basename,
               bytes=len(raw), focus_rows=result.get("focus_rows"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}
@@ -377,7 +427,7 @@ def connect_load_sample(request: Request = None):
             dst.write(src.read())
         try:
             result = _ingest_upload(sid)
-        except Exception as e:
+        except (UploadIngestError, loader_LoadConformanceError) as e:
             try:
                 os.remove(dest)
             except OSError:
@@ -385,8 +435,12 @@ def connect_load_sample(request: Request = None):
             return JSONResponse(
                 {"ok": False, "error": f"sample rejected at load: {e}. Existing "
                  "data preserved."}, status_code=422)
-        UploadSource().mark_ingested(
-            SourceConfig(sid, "upload-focus", sid, d, "public", "manual"), [dest])
+        except JoinRebuildError as e:
+            return JSONResponse(
+                {"ok": False, "error": f"sample cost data was loaded, but the "
+                 f"join/on-prem rebuild failed: {e}. Cost figures are updated; "
+                 "the join view may be stale until the next ingest.",
+                 "partition_committed": True}, status_code=500)
     obs.audit("load_sample", _rid(request), source_id=sid,
               focus_rows=result.get("focus_rows"))
     return {"ok": True, "dispatch": result, "sources": _sources_view()}
@@ -396,6 +450,14 @@ def connect_load_sample(request: Request = None):
 def connect_remove(body: dict, request: Request = None):
     source_id = (body.get("source_id") or "").strip()
     registry.remove_source(source_id)   # locked read-modify-write (no race)
+    # De-registering a source must also drop its committed focus_costs partition
+    # and rebuild the derived join — otherwise its rows keep contributing to
+    # every KPI/conformance/AI answer as ghost data until the next full re-seed.
+    from db import loader
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    deleted = loader.delete_source(source_id)
+    _rebuild_join_and_onprem(root)
     result = dispatcher.run()
-    obs.audit("source_remove", _rid(request), source_id=source_id)
-    return {"ok": True, "dispatch": result, "sources": _sources_view()}
+    obs.audit("source_remove", _rid(request), source_id=source_id, rows_removed=deleted)
+    return {"ok": True, "rows_removed": deleted, "dispatch": result,
+            "sources": _sources_view()}

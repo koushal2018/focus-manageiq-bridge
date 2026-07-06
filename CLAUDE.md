@@ -37,7 +37,7 @@ EBA-BACKLOG.md short ordered list of what ENBD builds during the sprint
 ## Tests & CI
 - **`tests/`** — `test_sql_guard.py` (pure logic, always runs) + `test_data_integrity.py` (DB-backed, skips if no Postgres). Guards the B-6/B-7 currency/join bugs + the SQL allowlist. Run: `FOCUS_PG_HOST=127.0.0.1 FOCUS_PG_PASS=focus_app_demo .venv/bin/python -m pytest tests/ -q`.
 - **`.github/workflows/ci.yml`** — py_compile + pytest with a real Postgres service (seeds, then runs the integrity tests) on every push/PR. AI layer off in CI.
-- pytest is dev/CI only (in `requirements.txt`), deliberately NOT in the production image (non-root `/opt/venv` is read-only).
+- pytest (and the httpx test client) are dev/CI only — in `requirements-dev.txt`, deliberately NOT in the production image (the Dockerfile installs only `requirements.txt`; non-root `/opt/venv` is read-only). CI installs both: `pip install -r requirements.txt -r requirements-dev.txt`.
 
 ## MCP servers (declared in `.mcp.json`)
 - **`focus-finops`** (HTTP) — authoritative FOCUS column/spec lookup. Use it before quoting FOCUS rules from memory.

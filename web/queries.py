@@ -306,25 +306,16 @@ def join_distribution() -> list[dict]:
     return out
 
 
-# Mandatory FOCUS v1.3 columns that MUST NOT be null (verified against the
-# spec via the focus-finops MCP — §3.1.x "MUST NOT be null"). The check is
-# deliberately conservative: only columns the spec marks Mandatory + non-null.
-_FOCUS_MANDATORY_NONNULL = [
-    ("service_category", "ServiceCategory"),
-    ("service_provider_name", "ServiceProviderName"),
-    ("billing_currency", "BillingCurrency"),
-    ("charge_period_start", "ChargePeriodStart"),
-    ("charge_period_end", "ChargePeriodEnd"),
-    ("billed_cost", "BilledCost"),
-]
-
-# ServiceCategory allowed values (FOCUS v1.3 §3.1.55, closed set, via MCP).
-_FOCUS_SERVICE_CATEGORIES = {
-    "AI and Machine Learning", "Analytics", "Business Applications", "Compute",
-    "Databases", "Developer Tools", "Multicloud", "Identity", "Integration",
-    "Internet of Things", "Management and Governance", "Media", "Migration",
-    "Mobile", "Networking", "Security", "Storage", "Web", "Other",
-}
+# Mandatory FOCUS v1.3 non-null columns and the ServiceCategory closed set,
+# both derived from the single source of truth (normalizer.focus_spec) so the
+# conformance dashboard can never disagree with the loader gate about what
+# "valid FOCUS" means. focus_spec stores (display, db_col); this view wants
+# (db_col, display), so we swap.
+from normalizer.focus_spec import (
+    MANDATORY_NONNULL_V1_3 as _SPEC_MANDATORY,
+    SERVICE_CATEGORIES_V1_3 as _FOCUS_SERVICE_CATEGORIES,
+)
+_FOCUS_MANDATORY_NONNULL = [(db_col, display) for display, db_col in _SPEC_MANDATORY]
 
 
 def focus_conformance() -> dict:
@@ -457,13 +448,23 @@ def workload_detail(vm_id: str) -> dict:
     if not jm:
         return {}
     head = jm[0]
-    util = db.query("""
-        SELECT ROUND(AVG(cpu_usage_pct)::NUMERIC,1) AS avg_cpu,
-               ROUND(MAX(cpu_usage_pct)::NUMERIC,1) AS max_cpu,
-               ROUND(AVG(mem_usage_pct)::NUMERIC,1) AS avg_mem,
-               ROUND(MAX(mem_usage_pct)::NUMERIC,1) AS max_mem,
-               COUNT(*) AS samples
-        FROM miq_utilization WHERE miq_vm_id = %(id)s""", {"id": int(vm_id)})
+    # miq_vm_id is TEXT: an 'ambiguous' join row stores comma-joined ids like
+    # '12,13', so it isn't a single integer. miq_utilization keys on one numeric
+    # VM id, so only fetch utilization when vm_id is a single integer — a
+    # comma-joined/non-numeric id gets no util rows instead of a 500 (int()
+    # ValueError). Default to a full None-valued dict (not {}) so the template's
+    # `d.util.avg_cpu is not none` guards resolve rather than raising on a
+    # missing attribute. (review finding)
+    util = [{"avg_cpu": None, "max_cpu": None, "avg_mem": None,
+             "max_mem": None, "samples": 0}]
+    if str(vm_id).isdigit():
+        util = db.query("""
+            SELECT ROUND(AVG(cpu_usage_pct)::NUMERIC,1) AS avg_cpu,
+                   ROUND(MAX(cpu_usage_pct)::NUMERIC,1) AS max_cpu,
+                   ROUND(AVG(mem_usage_pct)::NUMERIC,1) AS avg_mem,
+                   ROUND(MAX(mem_usage_pct)::NUMERIC,1) AS max_mem,
+                   COUNT(*) AS samples
+            FROM miq_utilization WHERE miq_vm_id = %(id)s""", {"id": int(vm_id)})
     # daily cost for this resource (from focus_costs joined by resource_id)
     daily = db.query("""
         SELECT charge_period_start::date AS day,
@@ -475,4 +476,4 @@ def workload_detail(vm_id: str) -> dict:
         SELECT service_name, SUM(billed_cost_usd)::NUMERIC(12,4) AS usd
         FROM focus_costs WHERE resource_id = %(rid)s
         GROUP BY service_name ORDER BY usd DESC""", {"rid": head["focus_resource_id"]})
-    return {"head": head, "util": util[0] if util else {}, "daily": daily, "decomp": decomp}
+    return {"head": head, "util": util[0], "daily": daily, "decomp": decomp}

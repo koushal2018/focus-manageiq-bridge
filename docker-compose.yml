@@ -63,7 +63,15 @@ services:
       FOCUS_GEN_SCALE: ${FOCUS_GEN_SCALE:-8}
     ports:
       - "${WEB_PORT:-8000}:8000"
+    # Persist out/ (source registry + upload inboxes) so uploaded data survives
+    # a container recreate: the seed re-dispatches the persisted inboxes, and
+    # since an upload source's partition is a pure function of its inbox, the
+    # warehouse is rebuilt identically. Without this, `docker compose up` after
+    # a recreate would silently drop every uploaded source. (review finding)
+    volumes:
+      - finops_out:/app/out
     restart: unless-stopped
 
 volumes:
   finops_pgdata:
+  finops_out:

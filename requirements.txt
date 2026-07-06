@@ -14,9 +14,6 @@ sqlglot>=23.0,<27.0
 # Production process manager: gunicorn supervises uvicorn workers.
 gunicorn>=21.2,<24.0
 
-# Test client for in-process route testing (Starlette TestClient needs httpx).
-httpx>=0.27,<1.0
-
-
-# Dev/CI only — test runner. Not needed at runtime.
-pytest>=8.0,<9.0
+# NOTE: dev/CI-only deps (pytest, httpx test client) live in
+# requirements-dev.txt — they are deliberately NOT installed into the
+# production image (the Dockerfile installs only this file). See CLAUDE.md.

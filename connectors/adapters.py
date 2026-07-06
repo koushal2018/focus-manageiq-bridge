@@ -23,13 +23,31 @@ from normalizer import focus_native_to_focus
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def _location_within_root(location: str) -> bool:
+    """A file-adapter `location` must resolve to a path INSIDE the project tree
+    — no absolute paths, no '..' traversal — so it can't be an arbitrary-file
+    READ primitive (SEC-2). Enforced HERE, at the read choke point, so the guard
+    covers EVERY registry row (hand-edited sources.json, a scheduler, a seed),
+    not only rows created through the /connect/add route."""
+    if not location or os.path.isabs(location):
+        return False
+    resolved = os.path.realpath(os.path.join(ROOT, location))
+    root = os.path.realpath(ROOT)
+    return resolved == root or resolved.startswith(root + os.sep)
+
+
 def _local_export(cfg: SourceConfig) -> list[DiscoveredExport]:
     """PoC discover(): the configured location is a CSV path on disk. If it
-    exists, it's the single export. Production overrides this with object-store
-    listing; normalize() is unchanged."""
-    path = cfg.location
-    if not os.path.isabs(path):
-        path = os.path.join(ROOT, path)
+    exists AND resolves inside the project tree, it's the single export.
+    Production overrides this with object-store listing; normalize() is
+    unchanged."""
+    if not _location_within_root(cfg.location):
+        # A location outside the tree is refused here regardless of how the
+        # registry row was created — the trust boundary, not just the UI route.
+        raise ValueError(
+            f"source {cfg.source_id!r} location {cfg.location!r} is outside the "
+            "project data tree (absolute path or '..' traversal refused)")
+    path = os.path.join(ROOT, cfg.location)
     if not os.path.exists(path):
         return []
     return [DiscoveredExport(source_id=cfg.source_id, export_id=os.path.basename(path), uri=path)]
@@ -57,70 +75,39 @@ def _sha256_file(path: str) -> str:
 
 class UploadSource:
     """A source whose exports arrive by user upload, not cloud fetch. discover()
-    lists *.csv in the source's inbox that have NOT been ingested before;
-    normalize() is the same native-FOCUS mapping every other source uses — the
-    only difference from a future S3 source is WHERE the bytes came from.
+    lists EVERY *.csv currently in the source's inbox (deduped by content hash
+    WITHIN the inbox — a byte-identical file uploaded twice under different
+    names is counted once); normalize() is the same native-FOCUS mapping every
+    other source uses — the only difference from a future S3 source is WHERE the
+    bytes came from.
 
-    Dedupe is by CONTENT HASH, not mtime: a `.ingested` sidecar in the inbox
-    records the sha256 of every file already ingested. This is robust to the
-    mtime pitfalls (1–2s filesystem resolution, clock skew / NTP correction,
-    same-name re-uploads) that an mtime watermark silently mis-handles, and it
-    means re-uploading byte-identical content is correctly a no-op while a
-    CHANGED file with the same name is re-ingested (its hash differs)."""
+    The inbox is the SOURCE OF TRUTH for an upload source's partition: a load
+    replaces `focus_costs WHERE source_id=…` with the normalized union of all
+    inbox files. This is deliberately NOT a cross-run watermark. A watermark
+    (return only files not seen before) is wrong here because the load does a
+    full partition REPLACE, not an append: after a watermark hid the earlier
+    files, the next upload would rebuild the partition from only the new file
+    and silently drop the earlier data — and a re-seed (which re-dispatches all
+    sources) would rebuild the partition as empty. Making discover() return the
+    whole inbox keeps the partition a pure function of the inbox, so repeated
+    dispatch and re-seed are idempotent and every uploaded file is preserved."""
     source_type = "upload-focus"
-
-    def _ingested_path(self, source_id: str) -> str:
-        return os.path.join(inbox_dir(source_id), ".ingested")
-
-    def _ingested_hashes(self, source_id: str) -> set[str]:
-        import json
-        p = self._ingested_path(source_id)
-        if not os.path.exists(p):
-            return set()
-        try:
-            with open(p) as f:
-                return set(json.load(f))
-        except (ValueError, OSError):
-            return set()
 
     def discover(self, cfg: SourceConfig) -> list[DiscoveredExport]:
         d = inbox_dir(cfg.source_id)
-        seen = self._ingested_hashes(cfg.source_id)
         found = []
+        seen_hashes: set[str] = set()
         for name in sorted(os.listdir(d)):
             if not name.endswith(".csv"):
                 continue
             p = os.path.join(d, name)
-            if _sha256_file(p) in seen:
-                continue  # byte-identical content already ingested
+            h = _sha256_file(p)
+            if h in seen_hashes:
+                continue  # same content already in this inbox (dup upload)
+            seen_hashes.add(h)
             found.append(DiscoveredExport(source_id=cfg.source_id,
                                           export_id=name, uri=p))
         return found
-
-    def mark_ingested(self, cfg: SourceConfig, paths: list[str]) -> None:
-        """Record the content hash of ONLY the given just-ingested files, so
-        identical content isn't re-ingested next dispatch. Marking only the
-        specific files (not every *.csv in the inbox) avoids a race where a
-        concurrent upload's not-yet-ingested file gets marked seen and silently
-        dropped (review finding). Best-effort per file."""
-        import json
-        seen = self._ingested_hashes(cfg.source_id)
-        for p in paths:
-            try:
-                if os.path.exists(p) and p.endswith(".csv"):
-                    seen.add(_sha256_file(p))
-            except OSError:
-                continue
-        with open(self._ingested_path(cfg.source_id), "w") as f:
-            json.dump(sorted(seen), f)
-
-    def advance_watermark(self, cfg: SourceConfig) -> None:
-        """DEPRECATED (race-prone): marks EVERY *.csv in the inbox as ingested.
-        Retained only for callers that ingest the whole inbox synchronously.
-        Prefer mark_ingested(cfg, [paths]) with the specific dispatched files."""
-        d = inbox_dir(cfg.source_id)
-        self.mark_ingested(cfg, [os.path.join(d, n) for n in os.listdir(d)
-                                 if n.endswith(".csv")])
 
     def normalize(self, cfg: SourceConfig, export: DiscoveredExport) -> NormalizeResult:
         rows, report = focus_native_to_focus.normalize_csv(export.uri)

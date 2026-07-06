@@ -58,6 +58,12 @@ def _non_usage_rows(rng, account_id, account_name, bps, bpe, cps, cpe,
     line, a commitment Purchase, a Credit, and a Refund. Small, fixed set per
     day — scaled by the caller. `x_extra` is the provider x_ dict to merge."""
     out = []
+    # Amounts are authored in USD scale. They must be denominated in the row's
+    # BillingCurrency, exactly like the Usage rows — otherwise a provider billed
+    # in AED (Azure) carries USD-magnitude numbers and, after the loader's
+    # AED->USD normalization, its Tax/Purchase/Credit/Refund come out ~3.67x
+    # smaller than another provider's identical lines. (review finding)
+    fx = common.usd_to_aed if currency == "AED" else (lambda x: x)
     specs = [
         ("Tax",      "Management and Governance", "VAT on cloud services", 12.50),
         ("Purchase", "Compute",                   "Compute Savings Plan (1yr, no upfront)", 240.00),
@@ -65,14 +71,15 @@ def _non_usage_rows(rng, account_id, account_name, bps, bpe, cps, cpe,
         ("Refund",   "Compute",                   "Refund — overcharge correction", -8.75),
     ]
     for cat, svc_cat, desc, amount in specs:
+        amt = fx(amount)
         r = _base_row()
         r.update({
             "BillingAccountId": account_id, "BillingAccountName": account_name,
             "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
             "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
             "ChargeCategory": cat, "ChargeDescription": desc,
-            "BilledCost": amount, "EffectiveCost": amount,
-            "ListCost": amount, "ContractedCost": amount,
+            "BilledCost": amt, "EffectiveCost": amt,
+            "ListCost": amt, "ContractedCost": amt,
             "BillingCurrency": currency, "PricingCurrency": "USD",
             "ServiceProviderName": provider_name, "InvoiceIssuerName": issuer,
             "ServiceCategory": svc_cat, "ServiceName": "Account-level charge",
@@ -259,7 +266,7 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
             r = _base_row()
             r.update({
                 "BillingAccountId": common.FAKE_AZURE_SUBSCRIPTION,
-                "SubAccountId": "rg-ai-prod",
+                "SubAccountId": "rg-ai-prod-demo",
                 "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
                 "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
                 "ChargeCategory": "Usage", "ChargeDescription": f"Azure OpenAI {meter}",
@@ -269,13 +276,13 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
                 "ServiceProviderName": "Microsoft", "InvoiceIssuerName": "Microsoft",
                 "ServiceCategory": "AI and Machine Learning", "ServiceName": "Azure OpenAI Service",
                 "SkuMeter": meter,
-                "ResourceId": f"/subscriptions/{common.FAKE_AZURE_SUBSCRIPTION}/resourceGroups/rg-ai-prod/providers/Microsoft.CognitiveServices/accounts/demo-aoai",
+                "ResourceId": f"/subscriptions/{common.FAKE_AZURE_SUBSCRIPTION}/resourceGroups/rg-ai-prod-demo/providers/Microsoft.CognitiveServices/accounts/demo-aoai",
                 "ResourceName": "demo-aoai", "ResourceType": "Microsoft.CognitiveServices/accounts",
                 "RegionId": "uaenorth", "RegionName": "UAE North",
                 "ConsumedQuantity": 125000, "ConsumedUnit": "Tokens",
                 "PricingQuantity": 125000, "PricingUnit": "1K Tokens",
                 "Tags": json.dumps({"app": "ai-assist", "env": "prod"}, separators=(",", ":")),
-                "x_SkuMeterId": "demo-aoai-meter", "x_ResourceGroupName": "rg-ai-prod",
+                "x_SkuMeterId": "demo-aoai-meter", "x_ResourceGroupName": "rg-ai-prod-demo",
             })
             rows.append(r)
     return rows, cols
@@ -348,7 +355,7 @@ def generate_oci(days: int = 3) -> tuple[list[dict], list[str]]:
             r = _base_row()
             cost = round((tokens / 10_000.0) * price_10k, 6)
             r.update({
-                "BillingAccountId": common.FAKE_OCI_TENANCY, "SubAccountId": "Analytics",
+                "BillingAccountId": common.FAKE_OCI_TENANCY, "SubAccountId": "DEMO-cmp-ai",
                 "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
                 "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
                 "ChargeCategory": "Usage", "ChargeDescription": f"OCI Generative AI {model_id}",

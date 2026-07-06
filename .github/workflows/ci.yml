@@ -43,7 +43,7 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Syntax check (py_compile, whole tree)
         run: python -m compileall -q ai connectors db generators join normalizer onprem web

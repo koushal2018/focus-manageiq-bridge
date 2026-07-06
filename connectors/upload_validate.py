@@ -10,18 +10,16 @@ from __future__ import annotations
 import csv
 import io
 
-# The minimal FOCUS columns a credible export must declare. This MUST stay in
-# lockstep with the loader's pre-commit conformance guard (db/loader.py
-# _LOAD_MANDATORY_NONNULL) and web.queries _FOCUS_MANDATORY_NONNULL — because
-# the load is a destructive TRUNCATE+reload, a file that passes upload but
-# fails the load gate would roll back and (correctly) preserve the old
-# warehouse, but the user's upload silently achieves nothing. Rejecting the
-# load-mandatory set HERE, at the door, makes that failure visible early.
-# ChargePeriodEnd in particular: header-only validation let a file with
-# ChargePeriodStart-but-no-ChargePeriodEnd through, and it only failed at the
-# post-load gate (GOTCHA W-14). It is load-mandatory, so it is upload-mandatory.
-MANDATORY = ["ServiceCategory", "BillingCurrency", "BilledCost",
-             "ChargePeriodStart", "ChargePeriodEnd", "ServiceProviderName"]
+# The minimal FOCUS columns a credible export must declare — the display-name
+# view of the single source of truth in normalizer.focus_spec. Derived (not
+# re-typed) so it cannot drift from the loader's in-txn gate: a file that passed
+# the door but failed the load would roll back and (correctly) preserve the old
+# warehouse, but the user's upload silently achieves nothing (GOTCHA W-14).
+# ChargePeriodEnd in particular: header-only validation once let a file with
+# ChargePeriodStart-but-no-ChargePeriodEnd through, failing only at the post-load
+# gate. It is load-mandatory, so it is upload-mandatory.
+from normalizer.focus_spec import MANDATORY_NONNULL_V1_3
+MANDATORY = [display for display, _db in MANDATORY_NONNULL_V1_3]
 
 
 def validate_focus_csv(raw: bytes) -> tuple[bool, str]:

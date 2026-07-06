@@ -38,6 +38,25 @@ SERVICE_CATEGORIES_V1_3 = {
 SERVICE_CATEGORY_REQUIRED = True
 SERVICE_CATEGORY_ALLOWS_NULL = False
 
+# The FOCUS Mandatory + non-null columns this project gates on, as
+# (display_name, db_column) pairs — the SINGLE source of truth. All three
+# consumers derive their view from this so they can never drift apart (a drift
+# re-arms W-14: a file that passes upload validation but fails the load gate,
+# so the load rolls back and the user's upload silently achieves nothing):
+#   - connectors/upload_validate.MANDATORY  (display names, door check)
+#   - db/loader._LOAD_MANDATORY_NONNULL     (db columns, in-txn load gate)
+#   - web/queries._FOCUS_MANDATORY_NONNULL  (pairs, conformance dashboard)
+# Verified against the FOCUS v1.3 spec via the focus-finops MCP ("MUST NOT be
+# null"); conservative — only columns the spec marks Mandatory + non-null.
+MANDATORY_NONNULL_V1_3 = [
+    ("ServiceCategory", "service_category"),
+    ("ServiceProviderName", "service_provider_name"),
+    ("BillingCurrency", "billing_currency"),
+    ("ChargePeriodStart", "charge_period_start"),
+    ("ChargePeriodEnd", "charge_period_end"),
+    ("BilledCost", "billed_cost"),
+]
+
 # Closed set of allowed ChargeCategory values per FOCUS v1.3. Case-sensitive.
 # Real exports are NOT all "Usage" — taxes, commitment purchases, credits,
 # refunds and adjustments all appear and break naive SUM(BilledCost).

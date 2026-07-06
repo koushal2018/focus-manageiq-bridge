@@ -275,12 +275,11 @@ def _copy(cur, table: str, cols: list[str], buf: io.StringIO,
 # ServiceCategory/USD rules). Because the load TRUNCATEs first, committing a
 # non-conformant batch would REPLACE a good warehouse with a broken one. We
 # check conformance INSIDE the transaction, before commit, and raise on
-# failure so the TRUNCATE rolls back and the prior data is preserved. Keep this
-# list in lockstep with web.queries and connectors.upload_validate. (GOTCHA W-16.)
-_LOAD_MANDATORY_NONNULL = [
-    "service_category", "service_provider_name", "billing_currency",
-    "charge_period_start", "charge_period_end", "billed_cost",
-]
+# failure so the TRUNCATE rolls back and the prior data is preserved. Derived
+# from the single source of truth (normalizer.focus_spec) so it cannot drift
+# from the upload-door check or the conformance dashboard. (GOTCHA W-16.)
+from normalizer.focus_spec import MANDATORY_NONNULL_V1_3 as _MANDATORY_NONNULL
+_LOAD_MANDATORY_NONNULL = [db_col for _display, db_col in _MANDATORY_NONNULL]
 
 
 class LoadConformanceError(Exception):
@@ -421,6 +420,27 @@ def load_source(source_id: str, csv_path: str) -> int:
     print(f"[loader] incremental: source {source_id!r} -{deleted}/+{n_focus} "
           f"focus_costs rows in {(finished - started).total_seconds():.2f}s")
     return n_focus
+
+
+def delete_source(source_id: str) -> int:
+    """Remove one source's partition from focus_costs (the inverse of
+    load_source). Used when a source is de-registered so its rows stop
+    contributing to every KPI/join/AI answer. Returns rows deleted. The caller
+    rebuilds the derived join afterward (the join spans all sources)."""
+    conn = psycopg2.connect(**_conn_kwargs())
+    try:
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM focus_costs WHERE source_id = %s", (source_id,))
+            deleted = cur.rowcount
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    print(f"[loader] removed source {source_id!r}: -{deleted} focus_costs rows")
+    return deleted
 
 
 def export_focus_costs_csv(path: str) -> int:

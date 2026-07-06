@@ -61,27 +61,38 @@ def run(only_source_id: str | None = None, out_csv: str | None = None) -> dict:
             summary.append({"source_id": cfg.source_id, "status": "no-adapter"})
             continue
 
-        exports = adapter.discover(cfg)
-        if not exports:
-            print(f"[dispatch] {cfg.source_id}: no exports found at "
-                  f"{cfg.location!r}")
-            summary.append({"source_id": cfg.source_id, "status": "no-exports"})
-            continue
-
-        src_rows = 0
+        # discover() is INSIDE the fail-soft boundary: a stubbed api-pull source
+        # raises NotImplementedError from discover(), and one such source must
+        # not sink the whole run (it would 500 every /connect action and abort
+        # the seed → restart loop). Accumulate this source's rows in a LOCAL
+        # buffer and only commit them to all_rows if the ENTIRE source succeeds —
+        # a mid-file normalize error must not leave a partial slice that a
+        # partition-replace load would treat as the source's full data.
         try:
+            exports = adapter.discover(cfg)
+            if not exports:
+                print(f"[dispatch] {cfg.source_id}: no exports found at "
+                      f"{cfg.location!r}")
+                summary.append({"source_id": cfg.source_id, "status": "no-exports"})
+                continue
+            src_buf: list[dict] = []
+            src_report: list[dict] = []
+            src_rows = 0
             for exp in exports:
                 result = adapter.normalize(cfg, exp)
                 for r in result.focus_rows:
                     r["_source_id"] = cfg.source_id
-                all_rows.extend(result.focus_rows)
-                all_report.extend(result.report)
+                src_buf.extend(result.focus_rows)
+                src_report.extend(result.report)
                 src_rows += result.loaded
         except Exception as e:  # one poison source must not sink the run
-            print(f"[dispatch] {cfg.source_id}: normalize error: {e}")
+            print(f"[dispatch] {cfg.source_id}: dispatch error: {e}")
             summary.append({"source_id": cfg.source_id, "status": "error",
                             "error": str(e)})
             continue
+        # Source fully succeeded — now commit its rows atomically.
+        all_rows.extend(src_buf)
+        all_report.extend(src_report)
         print(f"[dispatch] {cfg.source_id:18s} [{cfg.source_type:13s}] "
               f"-> {src_rows} FOCUS rows")
         summary.append({"source_id": cfg.source_id, "status": "ok", "rows": src_rows})
@@ -98,7 +109,13 @@ def run(only_source_id: str | None = None, out_csv: str | None = None) -> dict:
         w.writeheader()
         for r in all_rows:
             w.writerow({k: r.get(k, "") for k in columns})
-    with open(REPORT_JSON, "w") as f:
+    # Write the validation report to a per-source path when this is a
+    # single-source (upload) run, so it does NOT clobber the full-run report
+    # that covers every source with just this upload's handful of rows.
+    report_json = (
+        os.path.join(OUT_DIR, f"validation_report_{only_source_id}.json")
+        if only_source_id is not None else REPORT_JSON)
+    with open(report_json, "w") as f:
         json.dump(all_report, f, indent=2, default=str)
 
     distinct = sorted({r.get("ServiceCategory", "") for r in all_rows})
@@ -109,8 +126,14 @@ def run(only_source_id: str | None = None, out_csv: str | None = None) -> dict:
     if invalid:
         print(f"[dispatch] !!! non-conformant categories: {invalid}")
 
+    # `errored` lets a caller tell "this source produced no rows because it was
+    # already loaded" (safe no-op) apart from "this source FAILED to dispatch"
+    # (must not be treated as an empty-but-successful load — that would let a
+    # partition-replace wipe good data on a false success).
+    errored = [s for s in summary if s.get("status") == "error"]
     return {"sources": summary, "focus_rows": len(all_rows),
-            "nonconformant_categories": invalid, "out_csv": target_csv}
+            "nonconformant_categories": invalid, "out_csv": target_csv,
+            "errored": errored}
 
 
 if __name__ == "__main__":
