@@ -173,6 +173,16 @@ Running log of every non-obvious thing hit while building this PoC. Framed for t
 - **What:** `git push` worked earlier this session, then failed with "Repository not found / Authentication failed" and `ECONNREFUSED /run/user/1000/vscode-git-*.sock`. The repo and credentials are fine — pushes were authenticating through VS Code's git credential helper (a Unix socket), and that socket vanished when the VS Code remote/IDE connection dropped (same event that disconnected the IDE MCP server).
 - **Why it matters:** "Works then silently stops mid-session" with a misleading "Repository not found" (it's really "no credential"). Commits are safe locally; only the push is blocked.
 - **EBA action:** Push from the VS Code terminal (where the helper is live) or the Source Control panel. For headless/CI, configure a real credential (PAT in a `git credential-store`, or a deploy key) rather than relying on the IDE socket.
+- **Recovery from a non-IDE shell (verified):** the credential relay is just three env vars + the live socket — no IDE terminal needed. Find the socket owner (`ss -lxp | grep vscode-git` → pid → `/proc/<pid>/cmdline` gives the server build), then:
+  ```bash
+  SRV=~/.vscode-server/cli/servers/Stable-<build>/server
+  export VSCODE_GIT_ASKPASS_NODE="$SRV/node"
+  export VSCODE_GIT_ASKPASS_MAIN="$SRV/extensions/git/dist/askpass-main.js"
+  export VSCODE_GIT_IPC_HANDLE=/run/user/1000/vscode-git-<id>.sock   # a LIVE socket (ss -lxp)
+  export GIT_ASKPASS="$SRV/extensions/git/dist/askpass.sh"
+  git -c credential.helper= push origin <branch>
+  ```
+  Two traps: multiple `Stable-*` server builds coexist on disk — the env vars must point at the build that OWNS the live socket, and stale sockets from dead sessions linger in `/run/user/*/`, so pick the one `ss -lxp` shows a listener on. A plain `git push` without these vars hangs silently waiting for a terminal prompt (that's the "timeout after 2m" failure mode, not a network problem).
 
 ## Demo / MVP
 
