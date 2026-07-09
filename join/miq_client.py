@@ -3,8 +3,9 @@
 Per GOTCHA G-2: ManageIQ token auth uses X-Auth-Token, NOT Authorization
 Bearer. We default to HTTP Basic because that works per-request without
 maintaining a session token. Auth credentials come from MIQ_USER /
-MIQ_PASS env vars; for the local PoC appliance the default cred is
-admin:smartvm (see GOTCHA G-1 --- rotate before any non-PoC use).
+MIQ_PASS env vars; MIQ_PASS has NO default --- the appliance factory
+default (admin:smartvm, GOTCHA G-1) must be typed deliberately, never
+inherited silently by copy-pasted code.
 
 Per GOTCHA G-6: we trust the appliance cert by setting REQUESTS_CA_BUNDLE
 to an exported PEM. The exact export command is documented in GOTCHAS.md
@@ -37,6 +38,28 @@ def _basic_auth_header(user: str, password: str) -> str:
     return "Basic " + base64.b64encode(raw).decode()
 
 
+def _require_password(password: str | None) -> str:
+    """MIQ_PASS has no baked-in default (G-1): a hardcoded 'smartvm'
+    fallback travels into non-PoC deployments by copy-paste."""
+    password = password or os.environ.get("MIQ_PASS")
+    if not password:
+        raise MIQAuthError(
+            "MIQ_PASS not set. Export the appliance password (for the local "
+            "PoC appliance the factory default is documented in GOTCHAS.md "
+            "G-1 — rotate it for anything beyond the local PoC)."
+        )
+    return password
+
+
+def _require_http_url(url: str) -> str:
+    """Only http(s) may reach urlopen — a file:// or custom-scheme MIQ_URL
+    would otherwise be honored (Bandit B310)."""
+    scheme = urllib.parse.urlparse(url).scheme
+    if scheme not in ("http", "https"):
+        raise MIQAuthError(f"MIQ_URL must be http(s), got scheme {scheme!r}")
+    return url
+
+
 def get_vms(
     url: str | None = None,
     user: str | None = None,
@@ -49,9 +72,9 @@ def get_vms(
     each version's vms collection has its own attribute names and a wrong
     name 400s the whole request. Take the default attribute set.
     """
-    url = url or os.environ.get("MIQ_URL", "https://localhost/api")
+    url = _require_http_url(url or os.environ.get("MIQ_URL", "https://localhost/api"))
     user = user or os.environ.get("MIQ_USER", "admin")
-    password = password or os.environ.get("MIQ_PASS", "smartvm")
+    password = _require_password(password)
     ca_bundle = ca_bundle or os.environ.get("MIQ_CA_BUNDLE")
 
     if url.startswith("https://") and not ca_bundle:
@@ -79,7 +102,8 @@ def get_vms(
         },
     )
     try:
-        with urllib.request.urlopen(req, context=context, timeout=10) as resp:
+        # nosec B310 — scheme constrained to http(s) by _require_http_url above
+        with urllib.request.urlopen(req, context=context, timeout=10) as resp:  # nosec B310
             body = resp.read().decode()
     except urllib.error.HTTPError as e:
         raise MIQHTTPError(e.code, e.read().decode()) from None
@@ -98,7 +122,8 @@ def _get_json(endpoint: str, user: str, password: str,
         },
     )
     try:
-        with urllib.request.urlopen(req, context=context, timeout=30) as resp:
+        # nosec B310 — callers pass endpoints derived from a _require_http_url-validated base
+        with urllib.request.urlopen(req, context=context, timeout=30) as resp:  # nosec B310
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         raise MIQHTTPError(e.code, e.read().decode()) from None
@@ -123,9 +148,9 @@ def get_metric_rollups(
     Returns the raw rollup resource dicts (the collector maps them to the
     miq_utilization shape). TLS discipline identical to get_vms (G-6: no
     verify=False escape hatch)."""
-    url = url or os.environ.get("MIQ_URL", "https://localhost/api")
+    url = _require_http_url(url or os.environ.get("MIQ_URL", "https://localhost/api"))
     user = user or os.environ.get("MIQ_USER", "admin")
-    password = password or os.environ.get("MIQ_PASS", "smartvm")
+    password = _require_password(password)
     ca_bundle = ca_bundle or os.environ.get("MIQ_CA_BUNDLE")
 
     if url.startswith("https://") and not ca_bundle:

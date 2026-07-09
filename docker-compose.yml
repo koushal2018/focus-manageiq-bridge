@@ -11,7 +11,9 @@ name: focus-manageiq-bridge
 
 services:
   db:
-    image: postgres:16
+    # ECR Public mirror of the Docker Official image — same portability
+    # rationale as the Dockerfile base images (no Docker Hub rate limits).
+    image: public.ecr.aws/docker/library/postgres:16
     container_name: enbd_finops_db
     environment:
       POSTGRES_USER: ${FOCUS_PG_USER:-focus_app}

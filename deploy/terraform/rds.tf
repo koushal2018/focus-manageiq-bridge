@@ -53,6 +53,9 @@ resource "aws_rds_cluster" "focus" {
   vpc_security_group_ids  = [aws_security_group.db.id]
   storage_encrypted       = true
   kms_key_id              = aws_kms_key.rds.arn
+  # IAM DB auth (CKV_AWS_162): lets the app exchange its task/pod role for a
+  # short-lived token instead of the master password once ENBD wires it up.
+  iam_database_authentication_enabled = true
   backup_retention_period = var.environment == "prod" ? 14 : 3
   deletion_protection     = var.db_deletion_protection
   skip_final_snapshot     = var.environment != "prod"
@@ -69,5 +72,9 @@ resource "aws_rds_cluster_instance" "focus" {
   engine              = aws_rds_cluster.focus.engine
   engine_version      = aws_rds_cluster.focus.engine_version
   publicly_accessible = false
+  # Performance Insights (CKV_AWS_353): free at 7-day retention; encrypt with
+  # the same CMK as the cluster storage.
+  performance_insights_enabled    = true
+  performance_insights_kms_key_id = aws_kms_key.rds.arn
   tags                = { Name = "${local.name}-focus-${count.index}" }
 }

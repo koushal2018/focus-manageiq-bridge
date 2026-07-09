@@ -18,6 +18,13 @@ Names DIFFER from the cloud-side names per Workload.name_in_provider()
 so the join must reconcile name drift.
 
 Output: out/generators/miq_vmdb_seed.sql
+
+Security note (Bandit B608): this module string-builds SQL BY DESIGN — it
+emits a .sql script file for psql; there is no DB connection here, so
+driver-level parameterization does not apply. Every value comes from the
+in-repo synthetic WORKLOADS constants (no user input) and all strings pass
+through _q() (quote-doubling). The `nosec` markers below record that this
+was reviewed, not overlooked.
 """
 from __future__ import annotations
 
@@ -54,7 +61,7 @@ def _q(s: str | None) -> str:
 def _ems_lookup_subquery(name: str) -> str:
     """Resolve ems_id by name at insert-time --- works even if IDs shift."""
     return (
-        f"(SELECT id FROM ext_management_systems "
+        f"(SELECT id FROM ext_management_systems "  # nosec B608 — emitted SQL, _q()-quoted constants
         f"WHERE name = {_q(name)} LIMIT 1)"
     )
 
@@ -147,7 +154,7 @@ def build_sql() -> str:
 
         add(f"-- Workload: {wl.canonical_name} ({'on-prem' if is_onprem else ems_name})")
         add(
-            "INSERT INTO vms ("
+            "INSERT INTO vms ("  # nosec B608 — emitted SQL, _q()-quoted constants
             "id, name, vendor, location, ems_id, ems_ref, uid_ems, "
             "power_state, raw_power_state, cloud, template, retired, "
             "created_on, updated_on, type"
@@ -164,7 +171,7 @@ def build_sql() -> str:
 
         # hardwares row
         add(
-            "INSERT INTO hardwares ("
+            "INSERT INTO hardwares ("  # nosec B608 — emitted SQL, _q()-quoted constants
             "id, vm_or_template_id, cpu_total_cores, cpu_cores_per_socket, "
             "cpu_sockets, memory_mb"
             ") VALUES ("
@@ -182,7 +189,7 @@ def build_sql() -> str:
             cpu = max(0.0, min(100.0, wl.cpu_pct * (1.0 + jitter)))
             mem = max(0.0, min(100.0, wl.mem_pct * (1.0 + jitter)))
             add(
-                "INSERT INTO metric_rollups ("
+                "INSERT INTO metric_rollups ("  # nosec B608 — emitted SQL, _q()-quoted constants
                 "id, resource_type, resource_id, timestamp, "
                 "capture_interval, capture_interval_name, "
                 "cpu_usage_rate_average, mem_usage_absolute_average, "
@@ -207,7 +214,7 @@ def build_sql() -> str:
             uid_ems_az = arm.split("/")[-1]
             add(f"-- ...same workload as above, second MIQ inventory row on Azure")
             add(
-                "INSERT INTO vms ("
+                "INSERT INTO vms ("  # nosec B608 — emitted SQL, _q()-quoted constants
                 "id, name, vendor, location, ems_id, ems_ref, uid_ems, "
                 "power_state, raw_power_state, cloud, template, retired, "
                 "created_on, updated_on, type"
@@ -221,7 +228,7 @@ def build_sql() -> str:
                 ");"
             )
             add(
-                "INSERT INTO hardwares ("
+                "INSERT INTO hardwares ("  # nosec B608 — emitted SQL, _q()-quoted constants
                 "id, vm_or_template_id, cpu_total_cores, cpu_cores_per_socket, "
                 "cpu_sockets, memory_mb"
                 ") VALUES ("
@@ -234,7 +241,7 @@ def build_sql() -> str:
                 cpu = max(0.0, min(100.0, wl.cpu_pct * (1.0 + jitter)))
                 mem = max(0.0, min(100.0, wl.mem_pct * (1.0 + jitter)))
                 add(
-                    "INSERT INTO metric_rollups ("
+                    "INSERT INTO metric_rollups ("  # nosec B608 — emitted SQL, _q()-quoted constants
                     "id, resource_type, resource_id, timestamp, "
                     "capture_interval, capture_interval_name, "
                     "cpu_usage_rate_average, mem_usage_absolute_average, "

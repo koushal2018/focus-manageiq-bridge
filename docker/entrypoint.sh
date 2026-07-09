@@ -14,7 +14,15 @@ set -euo pipefail
 : "${FOCUS_PG_USER:=focus_app}"
 : "${FOCUS_PG_DB:=focus}"
 export FOCUS_PG_MODE=network
-export PGPASSWORD="${FOCUS_PG_PASS:-focus_app_demo}"
+# No baked-in password fallback: compose / helm always inject FOCUS_PG_PASS
+# (compose carries the localhost-only demo default; helm reads a Secret).
+# A silent default here would travel into a real deployment by copy-paste.
+if [ -z "${FOCUS_PG_PASS:-}" ]; then
+  echo "[entrypoint] FOCUS_PG_PASS is not set — refusing to start." >&2
+  echo "[entrypoint] Set it via docker-compose (.env) or the deployment secret." >&2
+  exit 1
+fi
+export PGPASSWORD="$FOCUS_PG_PASS"
 
 echo "[entrypoint] waiting for postgres ${FOCUS_PG_HOST}:${FOCUS_PG_PORT} ..."
 for i in $(seq 1 30); do

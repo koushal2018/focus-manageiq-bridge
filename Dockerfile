@@ -7,8 +7,13 @@
 # Serves the FastAPI app with gunicorn supervising uvicorn workers.
 # =============================================================
 
+# Base images pull from ECR Public (Docker Official Images mirror) — no
+# Docker Hub dependency (rate limits) and satisfies ECR-sourcing policy,
+# while staying anonymously pullable so the stack remains portable
+# (on-prem OR AWS, SPEC §2).
+
 # ---- Stage 1: builder ----
-FROM python:3.11-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.11-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -29,7 +34,7 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 
 # ---- Stage 2: runtime ----
-FROM python:3.11-slim AS runtime
+FROM public.ecr.aws/docker/library/python:3.11-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

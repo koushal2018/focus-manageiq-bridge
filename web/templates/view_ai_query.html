@@ -143,7 +143,9 @@
   }
   function show({sql, rows, err, warnings}) {
     const el = document.getElementById('res');
-    if (err) { el.innerHTML = '<div class="banner"><div><div class="label">Error</div><div class="text">'+err+'</div></div></div>'; return; }
+    // esc(err): friendlyError() appends raw server `data.detail` — unescaped,
+    // a malicious detail string would be reflected XSS via this innerHTML.
+    if (err) { el.innerHTML = '<div class="banner"><div><div class="label">Error</div><div class="text">'+esc(err)+'</div></div></div>'; return; }
     let warn = '';
     if (warnings && warnings.length) {
       warn = '<div class="banner" style="border-left-color:var(--accent);margin:0 0 18px"><div><div class="label">Check this number</div><div class="text">'

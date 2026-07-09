@@ -162,7 +162,7 @@ throwaway.
 | `join/resource_join_map.py` | **Survives.** The asymmetric join-key logic (J-1) is the hard-won core. |
 | `onprem/cost_model.py` | **Survives as fallback;** replaced by real ManageIQ chargeback reads where rates exist (O-1). |
 | `web/` (FastAPI + templates) | **Survives.** Same image; deploy manifest changes (Route vs local). |
-| `ai/` (Bedrock + SQL guard) | **Survives.** Guardrail (`sql_guard.py`) is production-grade by design (B-3). |
+| `ai/` (Bedrock + SQL guard) | **Survives.** Guardrail (`sql_guard.py`) was designed against production constraints (B-3); like all PoC code it still needs ENBD AppSec review before production use. |
 | `generators/` (synthetic data) | **Retired** for production; kept for CI fixtures + the EBA teaching path. |
 | `join/miq_snapshot.py` | **Retired;** replaced by the live MIQ collector once an appliance with the LM-1 memory cap is available. |
 
