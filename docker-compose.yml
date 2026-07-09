@@ -17,7 +17,10 @@ services:
     container_name: anybank_finops_db
     environment:
       POSTGRES_USER: ${FOCUS_PG_USER:-focus_app}
-      POSTGRES_PASSWORD: ${FOCUS_PG_PASS:-focus_app_demo}
+      # No default password (SEC-7): compose fails fast with this message if
+      # FOCUS_PG_PASS is unset. Demo value lives in .env.example only —
+      # `cp .env.example .env` is now step 1 of the quickstart.
+      POSTGRES_PASSWORD: "${FOCUS_PG_PASS:?FOCUS_PG_PASS is not set — run `cp .env.example .env`}"
       POSTGRES_DB: ${FOCUS_PG_DB:-focus}
     volumes:
       - finops_pgdata:/var/lib/postgresql/data
@@ -48,7 +51,7 @@ services:
       FOCUS_PG_HOST: db
       FOCUS_PG_PORT: "5432"
       FOCUS_PG_USER: ${FOCUS_PG_USER:-focus_app}
-      FOCUS_PG_PASS: ${FOCUS_PG_PASS:-focus_app_demo}
+      FOCUS_PG_PASS: "${FOCUS_PG_PASS:?FOCUS_PG_PASS is not set — run `cp .env.example .env`}"
       FOCUS_PG_DB: ${FOCUS_PG_DB:-focus}
       # AI layer: the stack runs fully without Bedrock. Default OFF; flip
       # BEDROCK_DISABLED=0 (e.g. in .env) to enable the NL-query free-text

@@ -16,11 +16,21 @@ from psycopg2 import sql as pgsql
 
 
 def _conn_kwargs() -> dict[str, Any]:
+    # No built-in default password (SEC-7): fail loud so a deployment can
+    # never silently run on a known credential. The demo value lives ONLY in
+    # .env.example; docker compose injects it via FOCUS_PG_PASS.
+    password = os.environ.get("FOCUS_PG_PASS") or os.environ.get("PGPASSWORD")
+    if not password:
+        raise RuntimeError(
+            "FOCUS_PG_PASS (or PGPASSWORD) is not set and there is no "
+            "built-in default. For the local demo: cp .env.example .env "
+            "(docker compose reads it), or export FOCUS_PG_PASS."
+        )
     return {
         "host":     os.environ.get("FOCUS_PG_HOST", "127.0.0.1"),
         "port": int(os.environ.get("FOCUS_PG_PORT", "5432")),
         "user":     os.environ.get("FOCUS_PG_USER", "focus_app"),
-        "password": os.environ.get("FOCUS_PG_PASS", "focus_app_demo"),
+        "password": password,
         "dbname":   os.environ.get("FOCUS_PG_DB",   "focus"),
         "connect_timeout": 5,
     }

@@ -12,26 +12,30 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # Ephemeral per-run DB password (SEC-7): unique to each run, dies with the
+    # throwaway service container, never a fixed literal in the repo. Not a
+    # repo secret on purpose — fork PRs don't receive secrets, and this CI
+    # must stay runnable from forks (synthetic data, localhost-only service).
+    env:
+      FOCUS_PG_HOST: localhost
+      FOCUS_PG_PORT: "5432"
+      FOCUS_PG_USER: focus_app
+      FOCUS_PG_PASS: ci-ephemeral-${{ github.run_id }}-${{ github.run_attempt }}
+      FOCUS_PG_DB: focus
+      BEDROCK_DISABLED: "1"   # AI layer stays off in CI — no cloud calls
+
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_USER: focus_app
-          POSTGRES_PASSWORD: focus_app_demo
+          POSTGRES_PASSWORD: ci-ephemeral-${{ github.run_id }}-${{ github.run_attempt }}
           POSTGRES_DB: focus
         ports:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U focus_app -d focus"
           --health-interval 10s --health-timeout 5s --health-retries 5
-
-    env:
-      FOCUS_PG_HOST: localhost
-      FOCUS_PG_PORT: "5432"
-      FOCUS_PG_USER: focus_app
-      FOCUS_PG_PASS: focus_app_demo
-      FOCUS_PG_DB: focus
-      BEDROCK_DISABLED: "1"   # AI layer stays off in CI — no cloud calls
 
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +53,7 @@ jobs:
         run: python -m compileall -q ai connectors db generators join normalizer onprem web
 
       - name: Apply schema
-        run: psql "postgresql://focus_app:focus_app_demo@localhost:5432/focus" -f db/schema.sql
+        run: PGPASSWORD="$FOCUS_PG_PASS" psql -h localhost -U focus_app -d focus -f db/schema.sql
 
       - name: Seed synthetic data
         run: python -m docker.seed

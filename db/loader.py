@@ -43,11 +43,21 @@ MIQ_UTIL_JSON = os.environ.get(
 
 
 def _conn_kwargs() -> dict:
+    # No built-in default password (SEC-7): fail loud so a deployment can
+    # never silently run on a known credential. The demo value lives ONLY in
+    # .env.example; docker compose injects it via FOCUS_PG_PASS.
+    password = os.environ.get("FOCUS_PG_PASS") or os.environ.get("PGPASSWORD")
+    if not password:
+        raise RuntimeError(
+            "FOCUS_PG_PASS (or PGPASSWORD) is not set and there is no "
+            "built-in default. For the local demo: cp .env.example .env "
+            "(docker compose reads it), or export FOCUS_PG_PASS."
+        )
     return {
         "host":     os.environ.get("FOCUS_PG_HOST", "127.0.0.1"),
         "port": int(os.environ.get("FOCUS_PG_PORT", "5432")),
         "user":     os.environ.get("FOCUS_PG_USER", "focus_app"),
-        "password": os.environ.get("FOCUS_PG_PASS", os.environ.get("PGPASSWORD", "focus_app_demo")),
+        "password": password,
         "dbname":   os.environ.get("FOCUS_PG_DB", "focus"),
         "connect_timeout": 10,
     }
@@ -295,6 +305,7 @@ def _assert_conformant_in_txn(cur) -> None:
     # compose with pgsql.Identifier (quoted) rather than f-string interpolation.
     from psycopg2 import sql as pgsql
     for col in _LOAD_MANDATORY_NONNULL:
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query — this IS the safe pattern: psycopg2.sql composition with a quoted Identifier (identifiers cannot be bind parameters); no string concatenation occurs.
         cur.execute(pgsql.SQL("SELECT COUNT(*) FROM focus_costs WHERE {} IS NULL")
                     .format(pgsql.Identifier(col)))
         n = cur.fetchone()[0]

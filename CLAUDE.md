@@ -41,7 +41,7 @@ EBA-BACKLOG.md short ordered list of what AnyBank builds during the sprint
 
 ## MCP servers (declared in `.mcp.json`)
 - **`focus-finops`** (HTTP) — authoritative FOCUS column/spec lookup. Use it before quoting FOCUS rules from memory.
-- **`postgres`** (stdio, `uvx postgres-mcp --access-mode restricted`) — read-only query/introspection of the local `focus` DB. Requires the compose stack up (the db now publishes `127.0.0.1:5432`). Localhost + synthetic only — never point at real customer data.
+- **`postgres`** (stdio, `uvx postgres-mcp --access-mode restricted`) — read-only query/introspection of the local `focus` DB. Requires the compose stack up (the db now publishes `127.0.0.1:5432`) AND `FOCUS_PG_PASS` exported at session start — the DSN has **no default password** (SEC-7), so without the env var the server can't connect. Localhost + synthetic only — never point at real customer data.
 - **`context7`** (stdio, `npx @upstash/context7-mcp`) — up-to-date library/framework docs (FastAPI, boto3, etc.). Verified it starts.
 - **`memory`** (stdio, `npx @modelcontextprotocol/server-memory`) — generic cross-session memory. Note: GOTCHAS.md + file auto-memory remain the project's primary, deliverable memory; this is supplementary.
 - **`github`** (stdio, `npx @modelcontextprotocol/server-github`) — **inert until you set `GITHUB_PERSONAL_ACCESS_TOKEN`** in the environment (no token is committed; the config references the env var). `gh` CLI is not installed.

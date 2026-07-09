@@ -27,11 +27,17 @@ over that bridge.
 | [`SPEC.md`](SPEC.md) | The approved design this was built to. |
 | [`docs/production-architecture.md`](docs/production-architecture.md) | The production target (ROSA + Aurora + S3 landing, region-parameterized) and what survives from the PoC. |
 
-## Run it (one command)
+## Run it (two commands)
 
 ```bash
+cp .env.example .env   # sets the local demo DB password — no baked-in default
 docker compose up --build
 ```
+
+There is deliberately **no built-in database password**: the stack fails fast
+with a clear message if `FOCUS_PG_PASS` is unset, so a copied deployment can
+never silently run on a known credential. The demo value lives only in
+`.env.example`.
 
 Then open **http://localhost:8000**. The stack:
 
