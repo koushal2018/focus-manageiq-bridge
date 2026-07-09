@@ -10,7 +10,7 @@
       "args": [
         "postgres-mcp",
         "--access-mode", "restricted",
-        "postgresql://focus_app:focus_app_demo@127.0.0.1:5432/focus"
+        "postgresql://focus_app:${FOCUS_PG_PASS:-focus_app_demo}@127.0.0.1:5432/focus"
       ]
     },
     "context7": {

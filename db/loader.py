@@ -291,8 +291,12 @@ def _assert_conformant_in_txn(cur) -> None:
     """Run the conformance rules against the just-COPYed (uncommitted) rows.
     Any failure raises LoadConformanceError → caller rolls back."""
     problems: list[str] = []
+    # `col` is a spec-derived constant, but it's still a dynamic identifier —
+    # compose with pgsql.Identifier (quoted) rather than f-string interpolation.
+    from psycopg2 import sql as pgsql
     for col in _LOAD_MANDATORY_NONNULL:
-        cur.execute(f"SELECT COUNT(*) FROM focus_costs WHERE {col} IS NULL")
+        cur.execute(pgsql.SQL("SELECT COUNT(*) FROM focus_costs WHERE {} IS NULL")
+                    .format(pgsql.Identifier(col)))
         n = cur.fetchone()[0]
         if n:
             problems.append(f"{n} row(s) with NULL {col}")

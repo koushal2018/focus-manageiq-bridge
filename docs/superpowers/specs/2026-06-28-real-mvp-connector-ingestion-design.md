@@ -9,11 +9,12 @@ normalization, honest banners, visible join, FOCUS conformance) still hold verba
 ## 0. Why this exists (the pivot)
 
 The PoC proved the hard parts (the FOCUS↔ManageIQ join, the Azure→FOCUS mapping, the
-mixed-currency normalization). The new intent is to turn that spike into a **real,
-production-grade MVP** that:
+mixed-currency normalization). The new intent is to turn that spike into a **real
+MVP built on production-style patterns** that:
 
-- runs production-grade **on synthetic data** (the operator is the AWS team; the only
-  thing fake is the data — everything else is production-quality, deploy-ready code);
+- runs **on synthetic data** (the operator is the AWS team; the only thing fake is the
+  data — everything else is code structured for production deployment, *after* the
+  appropriate security review and testing that any production promotion requires);
 - becomes a **reusable product** other customers can adopt **config-driven, single-tenant
   per deploy** (clone → configure → deploy their own instance; explicitly NOT multi-tenant
   SaaS, no SSO, no per-tenant isolation logic);

@@ -230,7 +230,12 @@ def headline_kpis() -> dict:
 
 def pipeline_snapshot() -> list[dict]:
     """Row counts per source table — the 'pipeline snapshot' panel."""
-    def n(t): return db.query(f"SELECT COUNT(*) AS n FROM {t}")[0]["n"]
+    # Table name is a dynamic identifier (can't be a bind param) — compose it
+    # with pgsql.Identifier so it's quoted, never interpolated as raw text.
+    from web.db import pgsql
+    def n(t):
+        q = pgsql.SQL("SELECT COUNT(*) AS n FROM {}").format(pgsql.Identifier(t))
+        return db.query(q)[0]["n"]
     return [
         {"table": "focus_costs",       "rows": n("focus_costs"),       "status": "OK",    "cls": "v-native"},
         {"table": "resource_join_map", "rows": n("resource_join_map"), "status": "OK",    "cls": "v-native"},
@@ -328,9 +333,14 @@ def focus_conformance() -> dict:
     total = db.query("SELECT COUNT(*) AS n FROM focus_costs")[0]["n"] or 0
     checks: list[dict] = []
 
-    # 1. Mandatory non-null columns.
+    # 1. Mandatory non-null columns. `col` comes from the focus_spec constant,
+    #    not user input, but compose it as an Identifier anyway — identifiers
+    #    can't be bind params, and quoting closes the string-interp SQL class.
+    from web.db import pgsql
     for col, display in _FOCUS_MANDATORY_NONNULL:
-        bad = db.query(f"SELECT COUNT(*) AS n FROM focus_costs WHERE {col} IS NULL")[0]["n"]
+        q = pgsql.SQL("SELECT COUNT(*) AS n FROM focus_costs WHERE {} IS NULL").format(
+            pgsql.Identifier(col))
+        bad = db.query(q)[0]["n"]
         checks.append({
             "rule": f"{display} present (non-null)",
             "kind": "mandatory-non-null",

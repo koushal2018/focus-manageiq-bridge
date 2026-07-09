@@ -323,14 +323,17 @@
     async function postJSON(u,b){ var r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
       var t=await r.text(); var d; try{d=JSON.parse(t);}catch(_){d={detail:t};} return {ok:r.ok,status:r.status,data:d}; }
 
+    // Escape EVERY dynamic value (column names AND cells) — uploaded FOCUS
+    // text columns are not sanitized at ingest, so any of them can carry
+    // markup. Same rule as view_ai_query.html; see GOTCHAS SEC-6.
     function rows2html(rows){
       if(!rows||!rows.length) return '<p class="ask-note">(0 rows)</p>';
       var cols=Object.keys(rows[0]); var h='<table class="data"><thead><tr>';
-      cols.forEach(function(c){h+='<th scope="col">'+c+'</th>';}); h+='</tr></thead><tbody>';
-      rows.forEach(function(r){ h+='<tr>'; cols.forEach(function(c){ var v=r[c]; h+='<td class="mono">'+(v===null?'<span style="color:var(--ink-faint)">null</span>':String(v))+'</td>'; }); h+='</tr>'; });
+      cols.forEach(function(c){h+='<th scope="col">'+esc(c)+'</th>';}); h+='</tr></thead><tbody>';
+      rows.forEach(function(r){ h+='<tr>'; cols.forEach(function(c){ var v=r[c]; h+='<td class="mono">'+(v===null?'<span style="color:var(--ink-faint)">null</span>':esc(String(v)))+'</td>'; }); h+='</tr>'; });
       return h+'</tbody></table>';
     }
-    function esc(s){ return String(s).replace(/</g,'&lt;'); }
+    function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
     // Map transport/status into the product's own voice — never show "HTTP 503".
     function friendlyError(status, data){
       if(status===503) return 'AI answers are off this session — the canned queries above still run.';

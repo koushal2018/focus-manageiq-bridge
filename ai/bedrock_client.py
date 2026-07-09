@@ -289,12 +289,15 @@ def ask_bedrock(question: str) -> BedrockAnswer:
     # Financial-sanity flags (H-10) — valid SQL can still be a wrong number.
     warnings = sql_guard.financial_sanity_warnings(sql)
 
-    # Execute via the read-only path. Guard-valid SQL can still fail at
-    # execution (a type mismatch, an unknown column the guard let pass).
-    # Surface that as a clean, SQL-showing message --- never a raw 500.
+    # Execute via the UNTRUSTED-SQL path: a READ ONLY transaction + statement
+    # timeout enforced by Postgres itself, so even SQL that talks its way past
+    # the AST guard cannot write or run unbounded (defense in depth — the
+    # guard is necessary but not sufficient for model-generated SQL).
+    # Guard-valid SQL can still fail at execution (a type mismatch, an unknown
+    # column). Surface that as a clean, SQL-showing message --- never a raw 500.
     from web import db
     try:
-        rows = db.query(sql)
+        rows = db.query_untrusted(sql)
     except Exception as e:  # psycopg2 errors, etc.
         raise BedrockQueryExecutionError(
             f"The generated SQL was safe but failed to run: "

@@ -12,6 +12,7 @@ from typing import Any, Iterator
 
 import psycopg2
 import psycopg2.extras
+from psycopg2 import sql as pgsql
 
 
 def _conn_kwargs() -> dict[str, Any]:
@@ -35,8 +36,33 @@ def get_conn() -> Iterator[psycopg2.extensions.connection]:
         c.close()
 
 
-def query(sql: str, params: tuple | dict | None = None) -> list[dict]:
-    """Run a SELECT and return rows as list[dict]."""
+def query(sql: str | pgsql.Composed, params: tuple | dict | None = None) -> list[dict]:
+    """Run a SELECT and return rows as list[dict].
+
+    Accepts psycopg2.sql.Composed so callers that need a dynamic identifier
+    (a table/column name, which CANNOT be a bind parameter) compose it with
+    pgsql.Identifier(...) instead of f-string interpolation.
+    """
     with get_conn() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(sql, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
+def query_untrusted(sql: str, timeout_ms: int = 5000) -> list[dict]:
+    """Run SQL that did NOT originate in this codebase (the AI NL-query path).
+
+    The sql_guard AST allowlist is the first gate, but any validator over
+    model-generated SQL is best-effort — so this path adds DATABASE-level
+    enforcement the guard cannot be talked out of:
+      - READ ONLY transaction: Postgres itself rejects any write/DDL that
+        slipped past the guard (SET TRANSACTION READ ONLY precedes the query
+        inside the same implicit transaction).
+      - statement_timeout: caps a pathological query so it can't be a DoS.
+    Production posture (EBA): run this through a dedicated DB role with
+    SELECT-only grants on the four FinOps tables — see GOTCHAS SEC-5.
+    """
+    with get_conn() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))
+        cur.execute(sql)
         return [dict(r) for r in cur.fetchall()]
