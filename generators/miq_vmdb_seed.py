@@ -45,9 +45,9 @@ DEMO_METRIC_ID_START = 900_001
 # during probing. If the appliance is re-provisioned these may shift --- the
 # SQL probes for the matching name as a guard.
 EMS_NAME_TO_TYPE = {
-    "enbd-aws": "ManageIQ::Providers::Amazon::CloudManager",
-    "enbd-azure-synthetic": "ManageIQ::Providers::Azure::CloudManager",
-    "enbd-oci-synthetic": "ManageIQ::Providers::OracleCloud::CloudManager",
+    "anybank-aws": "ManageIQ::Providers::Amazon::CloudManager",
+    "anybank-azure-synthetic": "ManageIQ::Providers::Azure::CloudManager",
+    "anybank-oci-synthetic": "ManageIQ::Providers::OracleCloud::CloudManager",
 }
 
 
@@ -71,7 +71,7 @@ def build_sql() -> str:
     add = lines.append
 
     add("-- ============================================================")
-    add("-- enbd-multicloud-finops-poc :: ManageIQ VMDB synthetic seed")
+    add("-- anybank-multicloud-finops-poc :: ManageIQ VMDB synthetic seed")
     add("-- ============================================================")
     add("-- This script seeds vms / hardwares / metric_rollups DIRECTLY,")
     add("-- bypassing the provider-refresh path (see GOTCHAS.md G-8/J-4).")
@@ -104,14 +104,14 @@ def build_sql() -> str:
 
         # Which provider does MIQ attribute this VM to?
         if wl.aws_instance_id and not wl.azure_resource_id:
-            ems_name = "enbd-aws"
+            ems_name = "anybank-aws"
             vendor = "amazon"
             uid_ems = wl.aws_instance_id
             ems_ref = wl.aws_instance_id  # AWS: ems_ref == uid_ems
             location = "me-central-1a"
             is_cloud = True
         elif wl.azure_resource_id and not wl.aws_instance_id and not wl.oci_resource_id:
-            ems_name = "enbd-azure-synthetic"
+            ems_name = "anybank-azure-synthetic"
             vendor = "azure"
             # On Azure: uid_ems is the GUID at the end of the ARM path;
             # ems_ref is the FULL ARM path. The Azure cost export uses the
@@ -126,14 +126,14 @@ def build_sql() -> str:
             # We emit the AWS row here; the Azure row gets emitted at the
             # next branch below. We achieve this by NOT setting ems_name
             # uniquely; instead we'll emit a second loop pass.
-            ems_name = "enbd-aws"
+            ems_name = "anybank-aws"
             vendor = "amazon"
             uid_ems = wl.aws_instance_id
             ems_ref = wl.aws_instance_id
             location = "me-central-1a"
             is_cloud = True
         elif wl.oci_resource_id:
-            ems_name = "enbd-oci-synthetic"
+            ems_name = "anybank-oci-synthetic"
             vendor = "oracle"
             uid_ems = wl.oci_resource_id
             ems_ref = wl.oci_resource_id
@@ -147,7 +147,7 @@ def build_sql() -> str:
             vendor = "redhat"
             uid_ems = None
             ems_ref = None
-            location = "ENBD-DC1"
+            location = "AnyBank-DC1"
             is_cloud = False
 
         ems_lookup = _ems_lookup_subquery(ems_name) if ems_name else "NULL"
@@ -220,7 +220,7 @@ def build_sql() -> str:
                 "created_on, updated_on, type"
                 ") VALUES ("
                 f"{vm_id}, {_q(miq_name)}, 'azure', 'uaenorth', "
-                f"{_ems_lookup_subquery('enbd-azure-synthetic')}, "
+                f"{_ems_lookup_subquery('anybank-azure-synthetic')}, "
                 f"{_q(arm)}, {_q(uid_ems_az)}, "
                 f"'on', 'on', true, false, false, "
                 f"'{now.isoformat()}', '{now.isoformat()}', "

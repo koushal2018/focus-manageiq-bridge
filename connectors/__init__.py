@@ -1,6 +1,6 @@
 """Connector framework — the 'connect a source and it runs' layer.
 
-ENBD's only production job is to register a data source (type + location +
+AnyBank's only production job is to register a data source (type + location +
 credential ref + schedule). The platform discovers the export, normalizes it
 to FOCUS v1.3, and loads it. Adding a SOURCE INSTANCE is a registry row, no
 deploy. Adding a SOURCE TYPE is a new adapter implementing the contract in

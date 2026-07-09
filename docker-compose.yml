@@ -1,11 +1,11 @@
 # =============================================================
-# ENBD Multi-Cloud FinOps PoC — one-command stack
+# AnyBank Multi-Cloud FinOps PoC — one-command stack
 #   docker compose up --build
 # Brings up Postgres + the web console, auto-seeds synthetic data,
 # serves the dashboard on http://localhost:8000.
 #
 # Portable (SPEC §2): runs on a laptop, on-prem, or any AWS host.
-# All data is synthetic. No real ENBD data, no real cloud credentials.
+# All data is synthetic. No real AnyBank data, no real cloud credentials.
 # =============================================================
 name: focus-manageiq-bridge
 
@@ -14,7 +14,7 @@ services:
     # ECR Public mirror of the Docker Official image — same portability
     # rationale as the Dockerfile base images (no Docker Hub rate limits).
     image: public.ecr.aws/docker/library/postgres:16
-    container_name: enbd_finops_db
+    container_name: anybank_finops_db
     environment:
       POSTGRES_USER: ${FOCUS_PG_USER:-focus_app}
       POSTGRES_PASSWORD: ${FOCUS_PG_PASS:-focus_app_demo}
@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: enbd_finops_web
+    container_name: anybank_finops_web
     depends_on:
       db:
         condition: service_healthy

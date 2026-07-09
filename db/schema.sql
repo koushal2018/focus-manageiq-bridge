@@ -1,5 +1,5 @@
 -- ============================================================
--- enbd-multicloud-finops-poc :: focus DB schema
+-- anybank-multicloud-finops-poc :: focus DB schema
 -- ============================================================
 -- THROWAWAY POC SCHEMA. NOT A PRODUCTION MIGRATION.
 --

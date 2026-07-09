@@ -1,7 +1,7 @@
 """Tenant configuration — the config-driven, single-tenant-per-deploy surface.
 
 The product is reused by cloning the repo and dropping in ONE config file:
-`config/tenant.json`. Everything customer-specific that was hardcoded for ENBD
+`config/tenant.json`. Everything customer-specific that was hardcoded for AnyBank
 (branding, product name, user label, reporting currency + FX rates) is read
 from here, so onboarding a new customer is configuration, not a code fork.
 

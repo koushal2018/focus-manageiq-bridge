@@ -1,21 +1,21 @@
-# enbd-multicloud-finops-poc — Claude session brief
+# focus-manageiq-bridge — Claude session brief
 
 **Read `SPEC.md` for the full design.** It is the source of truth and was approved before any code was written. This file only restates the non-negotiables and points at the things easy to forget.
 
 ## What this is
-A throwaway de-risking spike for the ENBD "Multi-Cloud Cost Optimization" engagement, built ahead of a 3-day **EBA innovation sprint** so the ENBD team can build the real thing themselves, faster. **The deliverable is `GOTCHAS.md` more than the running app.**
+A throwaway de-risking spike for the AnyBank "Multi-Cloud Cost Optimization" engagement, built ahead of a 3-day **EBA innovation sprint** so the AnyBank team can build the real thing themselves, faster. **The deliverable is `GOTCHAS.md` more than the running app.**
 
 ## Non-negotiables (will trip a future session)
 - **Messy synthetic data, not clean.** Clean data hides the FOCUS↔ManageIQ join problem, which is the whole point. See `SPEC.md` §3.1.
 - **Build by risk, not by feature order.** Hardest first: the join, then the Azure→FOCUS mapping. AI cost view is easiest and last-but-one. See `SPEC.md` §2 build order.
-- **No real ENBD data, no real cloud creds, no production posture.** Synthetic data must be obviously fake (`DEMO-` prefixes, fake account IDs).
+- **No real customer data, no real cloud creds, no production posture.** Synthetic data must be obviously fake (`DEMO-` prefixes, fake account IDs).
 - **Honest data-source banners on every UI view.** Each view states where its data comes from and what FOCUS can/can't do. Carbon is a stub; show it as one.
 - **Bedrock layer is optional and isolated.** FOCUS must work fully with the AI container stopped. Canned/parameterized queries before free-text. Wrong-cost-with-confident-narration is the worst outcome for a bank.
 - **Bedrock residency:** me-central-1 is Global-inference-profile only — document as a gotcha, don't paper over it.
 - **Portability invariant:** docker-compose, runs on-prem OR AWS. Hosting decision is open.
 
 ## Out of scope (don't drift into these)
-CMP/Terraform remediation, real creds, real ENBD data, production auth/multi-tenancy, real carbon feeds, the 4-year burndown calc.
+CMP/Terraform remediation, real creds, real customer data, production auth/multi-tenancy, real carbon feeds, the 4-year burndown calc.
 
 ## Repo layout (planned per SPEC §3, not yet built)
 ```
@@ -26,7 +26,7 @@ db/            postgres schema (focus_costs, miq_utilization, miq_onprem_cost, r
 web/           CMP-style single page, four views with data-source banners
 ai/            Bedrock NL-query (FastAPI), built last, optional
 GOTCHAS.md     THE deliverable — every non-obvious issue, framed for the EBA team
-EBA-BACKLOG.md short ordered list of what ENBD builds during the sprint
+EBA-BACKLOG.md short ordered list of what AnyBank builds during the sprint
 ```
 
 ## Skills loaded for this project
@@ -41,7 +41,7 @@ EBA-BACKLOG.md short ordered list of what ENBD builds during the sprint
 
 ## MCP servers (declared in `.mcp.json`)
 - **`focus-finops`** (HTTP) — authoritative FOCUS column/spec lookup. Use it before quoting FOCUS rules from memory.
-- **`postgres`** (stdio, `uvx postgres-mcp --access-mode restricted`) — read-only query/introspection of the local `focus` DB. Requires the compose stack up (the db now publishes `127.0.0.1:5432`). Localhost + synthetic only — never point at real ENBD data.
+- **`postgres`** (stdio, `uvx postgres-mcp --access-mode restricted`) — read-only query/introspection of the local `focus` DB. Requires the compose stack up (the db now publishes `127.0.0.1:5432`). Localhost + synthetic only — never point at real customer data.
 - **`context7`** (stdio, `npx @upstash/context7-mcp`) — up-to-date library/framework docs (FastAPI, boto3, etc.). Verified it starts.
 - **`memory`** (stdio, `npx @modelcontextprotocol/server-memory`) — generic cross-session memory. Note: GOTCHAS.md + file auto-memory remain the project's primary, deliverable memory; this is supplementary.
 - **`github`** (stdio, `npx @modelcontextprotocol/server-github`) — **inert until you set `GITHUB_PERSONAL_ACCESS_TOKEN`** in the environment (no token is committed; the config references the env var). `gh` CLI is not installed.

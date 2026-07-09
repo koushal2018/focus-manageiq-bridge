@@ -1,7 +1,7 @@
-# ENBD Multi-Cloud FinOps PoC — FOCUS + ManageIQ + Bedrock
+# AnyBank Multi-Cloud FinOps PoC — FOCUS + ManageIQ + Bedrock
 
 **Status:** Design-approved spec, ready for implementation
-**Author context:** Koushal Dutt (AWS, MENAT) for the Emirates NBD "Multi-Cloud Cost Optimization" engagement
+**Author context:** Koushal Dutt (AWS, MENAT) for the AnyBank "Multi-Cloud Cost Optimization" engagement
 **Date:** 2026-06-24
 
 ---
@@ -9,7 +9,7 @@
 ## 0. Read this first — what this PoC is and is NOT
 
 **This is a throwaway de-risking spike, not a product.** Its primary purpose is to let the AWS team
-(Koushal) walk into the planned 3-day **EBA innovation sprint** already knowing where the ENBD
+(Koushal) walk into the planned 3-day **EBA innovation sprint** already knowing where the AnyBank
 engineering team will get stuck — so the team can build the real thing
 **themselves** during the EBA, faster.
 
@@ -19,14 +19,14 @@ Therefore:
   during the build (data mapping quirks, join failures, API contract surprises, residency friction)
   gets written down there as it happens. That file is the real handoff.
 - **Code optimizes for legibility and teachability**, not elegance or performance. Each module is a
-  self-contained lesson the ENBD team will re-implement by hand. Comment generously; prefer obvious
+  self-contained lesson the AnyBank team will re-implement by hand. Comment generously; prefer obvious
   structure over clever abstractions.
-- **Do NOT** position or build this as production software: no real cloud credentials, no real ENBD
+- **Do NOT** position or build this as production software: no real cloud credentials, no real AnyBank
   data, no multi-tenancy, no production auth, no CMP/Terraform remediation actions.
 
 ### Engagement context (from May 7 & May 18, 2026 meetings)
 
-- ENBD runs **ManageIQ behind their CMP (Cloud Management Platform)** as the front-end for cloud
+- AnyBank runs **ManageIQ behind their CMP (Cloud Management Platform)** as the front-end for cloud
   deployments. They have **already integrated Azure cost data** into ManageIQ but have **not** aligned
   it to FOCUS. Their **chargeback module exists but is NOT enabled**. They built a **Node.js cost module**.
 - Agreed PoC architecture (what the customer has already seen): ingest cost extracts from **AWS (real),
@@ -79,7 +79,7 @@ where its data comes from and what FOCUS can/can't do. This is the answer to lea
 - Everything runs via **docker-compose** so it is portable (on-prem OR AWS) — respects the open hosting decision.
 - **ManageIQ is a REAL appliance** you stand up yourself, loaded with **synthetic data**. The integration
   hits its **real REST API** (`/api/vms`, `/api/container_*`, metrics rollups, chargeback) — this is how we
-  find the true API gotchas without needing ENBD's instance or real data.
+  find the true API gotchas without needing AnyBank's instance or real data.
 - The **AI layer is a separate container** that only reads Postgres. FOCUS must fully function with it
   stopped (directly answers "is the AI mandatory?" — no).
 
@@ -113,7 +113,7 @@ teaches nothing, then the real gotcha ambushes the team during the EBA. Inject, 
 - A **Bedrock AI line item** (per-model: e.g. Claude Sonnet input/output tokens) so #1 has real rows
 - Mixed currencies (AED/USD) to exercise `BillingCurrency` vs `PricingCurrency`
 
-Data must be **obviously synthetic** (fake account IDs, "DEMO-" prefixes) so no one mistakes it for ENBD
+Data must be **obviously synthetic** (fake account IDs, "DEMO-" prefixes) so no one mistakes it for AnyBank
 data — this defuses the leadership data-sensitivity concern during the demo.
 
 ### 3.2 FOCUS normalizer  `/normalizer`
@@ -152,7 +152,7 @@ FastAPI service, text-to-SQL over the FOCUS schema. **Built last.**
 
 ## 4. Tech choices
 
-- **Data layer:** Python (generators, normalizer, collector). Note: ENBD's existing module is Node.js —
+- **Data layer:** Python (generators, normalizer, collector). Note: AnyBank's existing module is Node.js —
   call this out as a divergence; Python chosen for data-tooling clarity and EBA teachability.
 - **DB:** PostgreSQL 16 (container).
 - **Web:** lightweight Python web UI (Flask or FastAPI + minimal HTML/Chart.js). No heavy frontend build.
@@ -168,14 +168,14 @@ FastAPI service, text-to-SQL over the FOCUS schema. **Built last.**
 3. Requirement #1 (AI cost by cloud & model) is **correct and demo-ready**.
 4. The FOCUS↔ManageIQ join works on **messy** synthetic data (and its failure modes are documented).
 5. **`GOTCHAS.md`** populated with every non-obvious issue hit, framed as guidance for the EBA team.
-6. A short **`EBA-BACKLOG.md`**: what the ENBD team builds during the sprint, in order, with the gotchas flagged.
+6. A short **`EBA-BACKLOG.md`**: what the AnyBank team builds during the sprint, in order, with the gotchas flagged.
 7. Bedrock layer can be switched off and the rest still works.
 
 ---
 
 ## 6. Explicitly OUT of scope (YAGNI)
 
-CMP/Terraform remediation, live cloud credentials, real ENBD data, real carbon feeds, production auth /
+CMP/Terraform remediation, live cloud credentials, real AnyBank data, real carbon feeds, production auth /
 multi-tenancy, performance tuning, the 4-year burndown calc (unless trivially free from existing data).
 
 ---
@@ -184,10 +184,10 @@ multi-tenancy, performance tuning, the 4-year burndown calc (unless trivially fr
 
 - **The join is the whole game** for #2/#3 and is genuinely hard (entity resolution across AWS/Azure/
   on-prem; on-prem has no cloud ResourceId). Clean synthetic data will hide this — that's why §3.1 mandates messy data.
-- **ManageIQ chargeback is disabled by default** — you must enable it in your appliance; ENBD will have to
+- **ManageIQ chargeback is disabled by default** — you must enable it in your appliance; AnyBank will have to
   enable it too. Document the steps.
 - **Carbon stub may read as "AWS couldn't do it"** to leadership — the roadmap framing (CCFT for the AWS
   slice is real and could show real-ish data) must be explicit so it lands as honesty, not a gap.
 - **Bedrock NL layer is high-visibility / high-risk** — keep it last and optional; canned queries first.
-- **This is a reference spike, not ENBD's product** — state that to the customer so the build isn't
+- **This is a reference spike, not AnyBank's product** — state that to the customer so the build isn't
   mistaken for an AWS-owned deliverable.

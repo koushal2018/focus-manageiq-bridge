@@ -1,8 +1,8 @@
-# Production architecture — ENBD Multi-Cloud FinOps
+# Production architecture — AnyBank Multi-Cloud FinOps
 
 **Status:** Design for review. Not yet approved, not yet built.
 **Date:** 2026-06-26.
-**Author context:** Koushal Dutt (AWS, MENAT) for Emirates NBD.
+**Author context:** Koushal Dutt (AWS, MENAT) for AnyBank.
 **Relationship to the PoC:** the PoC in this repo is the throwaway de-risking
 spike. This document describes what the production system looks like *after*
 the EBA sprint, and which PoC components survive the transition unchanged.
@@ -15,7 +15,7 @@ the EBA sprint, and which PoC components survive the transition unchanged.
 
 ## 0a. Design north star — connect-and-run
 
-**ENBD's only job in production is to connect data sources. The platform does
+**AnyBank's only job in production is to connect data sources. The platform does
 the rest.** No code change to onboard a new AWS account, Azure subscription,
 OCI tenancy, or ManageIQ appliance — each is a row of configuration plus a
 credential in Secrets Manager. The platform discovers the export, normalizes
@@ -25,7 +25,7 @@ This means the architecture is a **connector framework**, not a hard-wired
 pipeline:
 
 ```
-ENBD admin UI / config:  "Add data source"
+AnyBank admin UI / config:  "Add data source"
    ├─ type: aws-cur | azure-export | oci-usage | manageiq
    ├─ where: S3 path / blob URL / object-store prefix / MIQ endpoint
    ├─ credential ref: secrets-manager ARN  (never a raw secret)
@@ -74,8 +74,8 @@ FOCUS-conformant cost exports from AWS, Azure, and OCI land in object storage,
 get normalized to FOCUS v1.3, and are stored in **Aurora PostgreSQL**. ManageIQ
 (on-prem, Red Hat lineage) is collected over a private link for inventory,
 utilization, and on-prem chargeback. A **ROSA** (managed OpenShift on AWS)
-web tier serves the four-view dashboard, reachable only from ENBD's network
-and authenticated through ENBD's existing IdP. An **isolated Bedrock** service
+web tier serves the four-view dashboard, reachable only from AnyBank's network
+and authenticated through AnyBank's existing IdP. An **isolated Bedrock** service
 provides optional NL-query, fail-closed, behind a SQL guardrail. Everything is
 region-parameterized: **us-east-1 for the pilot on synthetic data,
 me-central-1 (UAE) for production on real data** (P-1).
@@ -90,8 +90,8 @@ me-central-1 (UAE) for production on real data** (P-1).
 | Region — pilot | **us-east-1** | Simpler, best Bedrock availability, synthetic data only. |
 | Region — prod | **me-central-1 (UAE)** | Real cost data residency (P-1). Decision is explicit, not default. |
 | FOCUS store | **Aurora PostgreSQL** | Direct lift of the PoC schema + loader + queries. Right-sized for one bank's cost volume (millions of rows/month). Migration friction ≈ zero (D-1). |
-| Web tier | **ROSA** (managed OpenShift) | ENBD is an OpenShift shop; ManageIQ is Red Hat lineage (P-2). PoC image runs unchanged. |
-| Access | **Private + ENBD SSO** | No public exposure. Private ALB/Route, ENBD IdP (SAML/OIDC), WAF. Bank-appropriate. |
+| Web tier | **ROSA** (managed OpenShift) | AnyBank is an OpenShift shop; ManageIQ is Red Hat lineage (P-2). PoC image runs unchanged. |
+| Access | **Private + AnyBank SSO** | No public exposure. Private ALB/Route, AnyBank IdP (SAML/OIDC), WAF. Bank-appropriate. |
 | AI layer | **Isolated Bedrock, fail-closed** | FOCUS works fully with AI off (SPEC §3.6). SQL guardrail enforced at parser level (B-3). |
 
 Alternatives considered and rejected:
@@ -134,7 +134,7 @@ Alternatives considered and rejected:
  │ • ManageIQ REST over   │    │  • FastAPI image (PoC)   │
  │   private link (G-2)   │    │  • 4 views + NL query    │
  │ • inventory, C&U %,    │    │  • Route (OpenShift)     │
- │   chargeback (G-5)     │    │  • ENBD SSO (OIDC/SAML)  │
+ │   chargeback (G-5)     │    │  • AnyBank SSO (OIDC/SAML)  │
  │ • on-prem, no cloud    │    │  • WAF, private only     │
  │   ResourceId (J-1)     │    └──────────┬──────────────┘
  └────────────────────────┘               │
@@ -162,7 +162,7 @@ throwaway.
 | `join/resource_join_map.py` | **Survives.** The asymmetric join-key logic (J-1) is the hard-won core. |
 | `onprem/cost_model.py` | **Survives as fallback;** replaced by real ManageIQ chargeback reads where rates exist (O-1). |
 | `web/` (FastAPI + templates) | **Survives.** Same image; deploy manifest changes (Route vs local). |
-| `ai/` (Bedrock + SQL guard) | **Survives.** Guardrail (`sql_guard.py`) was designed against production constraints (B-3); like all PoC code it still needs ENBD AppSec review before production use. |
+| `ai/` (Bedrock + SQL guard) | **Survives.** Guardrail (`sql_guard.py`) was designed against production constraints (B-3); like all PoC code it still needs AnyBank AppSec review before production use. |
 | `generators/` (synthetic data) | **Retired** for production; kept for CI fixtures + the EBA teaching path. |
 | `join/miq_snapshot.py` | **Retired;** replaced by the live MIQ collector once an appliance with the LM-1 memory cap is available. |
 
@@ -176,7 +176,7 @@ framework. New components the EBA team builds:
 | `connectors/registry` (DB table + API) | One row per connected source: type, location, credential ref, schedule, last-run watermark. The "Add data source" surface writes here. |
 | `connectors/dispatcher` (scheduled worker) | Reads the registry, invokes the right adapter per source on schedule, records watermarks, emits the validation report. |
 | `connectors/adapters/*` | Thin wrappers around the PoC's `normalizer/*_to_focus.py` implementing the `SourceAdapter` contract (§0a). Adding a source type = adding an adapter; adding a source *instance* = a registry row, no deploy. |
-| Admin UI "Connect a source" | Form → registry row + Secrets Manager credential. The only thing ENBD touches to onboard a cloud account. |
+| Admin UI "Connect a source" | Form → registry row + Secrets Manager credential. The only thing AnyBank touches to onboard a cloud account. |
 
 ---
 
@@ -194,9 +194,9 @@ framework. New components the EBA team builds:
   must be rotated (G-1).
 - **Network:** platform in private subnets. ManageIQ reached over
   Direct Connect / VPN / PrivateLink, not the public internet. Web tier
-  private, ENBD-IdP-gated, WAF in front.
+  private, AnyBank-IdP-gated, WAF in front.
 - **Multi-account:** ingest, warehouse, and serving in separate AWS accounts
-  under ENBD's Organization, with SCPs. Cost-data account is the crown jewel —
+  under AnyBank's Organization, with SCPs. Cost-data account is the crown jewel —
   tightest blast radius.
 - **AI fail-closed:** every model-produced SQL is parser-validated against the
   four-table allowlist (B-3); a wrong-cost-with-confident-narration is the
@@ -210,25 +210,25 @@ framework. New components the EBA team builds:
 | Phase | Data | Region | Compute | Goal |
 |---|---|---|---|---|
 | **0 — PoC (this repo)** | synthetic | local / us-east-1 | docker-compose | de-risk the join + mappings; produce GOTCHAS.md |
-| **1 — Pilot** | synthetic + 1 real AWS account (read-only CUR) | us-east-1 | ROSA (or ECS Fargate) | prove the pipeline on one real cost feed, ENBD SSO, private access |
+| **1 — Pilot** | synthetic + 1 real AWS account (read-only CUR) | us-east-1 | ROSA (or ECS Fargate) | prove the pipeline on one real cost feed, AnyBank SSO, private access |
 | **2 — Production** | all real (AWS+Azure+OCI+on-prem) | **me-central-1** | ROSA | full multi-cloud, Multi-AZ Aurora, rotation, WAF, SCPs |
 | **3 — Optimize** | + Bedrock NL-query, carbon feeds | me-central-1 | ROSA | AI layer (if legal clears B-1), CCFT/EID carbon streams (C-1..C-5) |
 
 Each phase is a go/no-go gate. Phase 1 does NOT carry real data into us-east-1
-beyond a single read-only AWS account that ENBD explicitly designates, and even
+beyond a single read-only AWS account that AnyBank explicitly designates, and even
 that is a conscious call — see P-1.
 
 ---
 
 ## 6. Compute: ROSA vs ECS Fargate (the live decision)
 
-**ROSA** if this joins ENBD's OpenShift platform estate (recommended given P-2):
+**ROSA** if this joins AnyBank's OpenShift platform estate (recommended given P-2):
 the team operates it with the `oc`/Operators/Routes they already use; ManageIQ's
 Red Hat lineage makes this the natural home; the PoC image runs unchanged.
 
 **ECS Fargate** if this stays a standalone, low-traffic internal dashboard:
 no cluster to run, scales near-zero, cheapest ops burden, same image. The
-trade is it lives outside the OpenShift platform the rest of ENBD's apps use.
+trade is it lives outside the OpenShift platform the rest of AnyBank's apps use.
 
 The web tier is **stateless** — all state is in Aurora — so this decision is
 reversible and does not affect any other component. Pick ROSA to align with the
@@ -237,7 +237,7 @@ container image and the `FOCUS_PG_*` contract are identical.
 
 ---
 
-## 7. Open decisions for ENBD (not ours to make)
+## 7. Open decisions for AnyBank (not ours to make)
 
 1. **Production region** — confirm me-central-1 for real data (P-1). Legal sign-off.
 2. **ROSA vs ECS Fargate** (§6) — depends on whether this joins the OpenShift estate.
@@ -252,7 +252,7 @@ container image and the `FOCUS_PG_*` contract are identical.
 
 ## 8. What this document is not
 
-- Not an approved design — it's a starting point for the ENBD architecture review.
+- Not an approved design — it's a starting point for the AnyBank architecture review.
 - Not a cost estimate — that follows once §7 decisions land.
-- Not a commitment to build — the PoC proves feasibility; ENBD's team builds
+- Not a commitment to build — the PoC proves feasibility; AnyBank's team builds
   the real thing during/after the EBA sprint, using this as the target picture.

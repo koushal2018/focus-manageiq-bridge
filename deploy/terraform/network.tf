@@ -1,8 +1,8 @@
 # =============================================================
 # VPC with private + public subnets. The platform sits PRIVATE; the
-# dashboard is reached via ENBD's network + IdP, not the public internet
+# dashboard is reached via AnyBank's network + IdP, not the public internet
 # (production-architecture.md access decision). Public subnets exist only
-# for the NAT gateways and (optionally) the ROSA API/ingress if ENBD opts
+# for the NAT gateways and (optionally) the ROSA API/ingress if AnyBank opts
 # for a public-ingress ROSA — most bank deployments choose private ROSA.
 # =============================================================
 

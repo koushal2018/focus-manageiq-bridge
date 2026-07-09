@@ -1,5 +1,5 @@
 // CloudFront Function (viewer-request) — HTTP Basic Auth at the edge.
-// Gates the synthetic ENBD FinOps PoC console so a bank-branded demo is
+// Gates the synthetic AnyBank FinOps PoC console so a bank-branded demo is
 // never on the open internet unauthenticated. Credentials are demo-only;
 // the warehouse is synthetic (DEMO-*). Rotate by republishing this function.
 function handler(event) {
@@ -13,7 +13,7 @@ function handler(event) {
             statusCode: 401,
             statusDescription: "Unauthorized",
             headers: {
-                "www-authenticate": { value: 'Basic realm="ENBD FinOps PoC (synthetic)"' }
+                "www-authenticate": { value: 'Basic realm="AnyBank FinOps PoC (synthetic)"' }
             }
         };
     }

@@ -86,7 +86,7 @@ def onprem_cost_estimate() -> list[dict]:
 
     Per GOTCHA O-1: the rows here come from `onprem/cost_model.py`,
     not from a live ManageIQ chargeback module (that path died with the
-    appliance per LM-1). The cost model uses ENBD's existing per-resource
+    appliance per LM-1). The cost model uses AnyBank's existing per-resource
     formula; the EBA team replaces the rate constants with real numbers.
 
     We enrich each row with workload metadata (cpu_cores, memory_mb,
@@ -148,7 +148,7 @@ def carbon_stub() -> list[dict]:
         {"provider": "AWS",         "feed": "AWS Customer Carbon Footprint Tool (CCFT)",       "status": "real, available via Billing Console; not yet wired"},
         {"provider": "Azure",       "feed": "Azure Emissions Impact Dashboard",                "status": "real, available via Azure Portal; not yet wired"},
         {"provider": "OCI",         "feed": "No first-party feed today",                       "status": "would need custom model"},
-        {"provider": "On-prem (MIQ)","feed": "Custom model (kWh per VM * grid intensity)",     "status": "would need ENBD DC PUE + grid data"},
+        {"provider": "On-prem (MIQ)","feed": "Custom model (kWh per VM * grid intensity)",     "status": "would need AnyBank DC PUE + grid data"},
     ]
 
 
@@ -406,7 +406,7 @@ def top_rightsizing(limit: int = 6) -> list[dict]:
 
 
 # Synthetic, illustrative monthly budget targets per provider (USD). Clearly
-# labelled in the UI as illustrative — not a real ENBD budget.
+# labelled in the UI as illustrative — not a real AnyBank budget.
 _BUDGET_USD = {"AWS": 1200.0, "Microsoft": 780.0,
                "Oracle Cloud Infrastructure": 760.0, "__onprem__": 4000.0}
 

@@ -112,7 +112,7 @@ def generate_aws(days: int = 3) -> tuple[list[dict], list[str]]:
                 r = _base_row()
                 r.update({
                     "BillingAccountId": common.FAKE_AWS_ACCOUNT_ID,
-                    "BillingAccountName": "DEMO-ENBD-AWS",
+                    "BillingAccountName": "DEMO-AnyBank-AWS",
                     "SubAccountId": sub, "SubAccountName": sub,
                     "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
                     "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
@@ -142,7 +142,7 @@ def generate_aws(days: int = 3) -> tuple[list[dict], list[str]]:
                 rows.append(r)
         # account-level non-usage charges (Tax/Purchase/Credit/Refund)
         rows.extend(_non_usage_rows(
-            rng, common.FAKE_AWS_ACCOUNT_ID, "DEMO-ENBD-AWS", bps, bpe, cps, cpe,
+            rng, common.FAKE_AWS_ACCOUNT_ID, "DEMO-AnyBank-AWS", bps, bpe, cps, cpe,
             "AWS", "Amazon Web Services, Inc.", "USD",
             {"x_Discounts": "0", "x_Operation": "", "x_ServiceCode": "AccountCharge"}))
 
@@ -222,7 +222,7 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
                 aed = common.usd_to_aed
                 r.update({
                     "BillingAccountId": common.FAKE_AZURE_SUBSCRIPTION,
-                    "BillingAccountName": "DEMO-ENBD-Azure",
+                    "BillingAccountName": "DEMO-AnyBank-Azure",
                     "SubAccountId": sub, "SubAccountName": sub,
                     "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
                     "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
@@ -253,7 +253,7 @@ def generate_azure(days: int = 3) -> tuple[list[dict], list[str]]:
                 rows.append(r)
         # account-level non-usage charges (Tax/Purchase/Credit/Refund)
         rows.extend(_non_usage_rows(
-            rng, common.FAKE_AZURE_SUBSCRIPTION, "DEMO-ENBD-Azure", bps, bpe, cps, cpe,
+            rng, common.FAKE_AZURE_SUBSCRIPTION, "DEMO-AnyBank-Azure", bps, bpe, cps, cpe,
             "Microsoft", "Microsoft", "AED",
             {"x_SkuMeterId": "", "x_ResourceGroupName": ""}))
 

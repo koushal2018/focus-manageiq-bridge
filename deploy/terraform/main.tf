@@ -1,5 +1,5 @@
 # =============================================================
-# Providers + remote state. ENBD fills the backend with their existing
+# Providers + remote state. AnyBank fills the backend with their existing
 # Terraform state bucket + lock table before `terraform init`.
 # =============================================================
 
@@ -19,12 +19,12 @@ terraform {
     }
   }
 
-  # ---- Remote state (ENBD supplies real values) ----
+  # ---- Remote state (AnyBank supplies real values) ----
   # backend "s3" {
-  #   bucket         = "enbd-terraform-state"
+  #   bucket         = "anybank-terraform-state"
   #   key            = "finops/terraform.tfstate"
   #   region         = "us-east-1"
-  #   dynamodb_table = "enbd-terraform-locks"
+  #   dynamodb_table = "anybank-terraform-locks"
   #   encrypt        = true
   # }
 }

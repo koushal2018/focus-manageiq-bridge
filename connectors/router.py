@@ -396,7 +396,7 @@ async def connect_upload(source_id: str = Form(...), file: UploadFile = File(...
 
 # The FinOps Foundation's anonymized REAL FOCUS sample (CC BY 4.0), vendored.
 # Proves the pipeline handles real-world FOCUS (version skew, literal NULLs),
-# not just our synthetic data. Labelled clearly as third-party sample, NOT ENBD.
+# not just our synthetic data. Labelled clearly as third-party sample, NOT AnyBank.
 _FOUNDATION_SAMPLE = os.path.join(
     _PROJECT_ROOT, "fixtures", "focus_foundation_sample", "focus_sample_1000.csv")
 _FOUNDATION_SOURCE_ID = "foundation-focus-sample"

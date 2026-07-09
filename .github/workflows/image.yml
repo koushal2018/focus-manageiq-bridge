@@ -2,7 +2,7 @@ name: Build & push image
 
 # Builds the production web image and pushes it to ECR on a version tag
 # (v*) or manual dispatch. The actual cluster rollout (`helm upgrade`) is
-# deliberately NOT here — it runs from a credentialed ENBD session against the
+# deliberately NOT here — it runs from a credentialed AnyBank session against the
 # private ROSA cluster (the PoC role has no eks/ecr/iam access, GOTCHAS
 # CX-4/CX-5). This workflow is the "build the artifact" half; the deploy half
 # is documented in deploy/README.md step 6.

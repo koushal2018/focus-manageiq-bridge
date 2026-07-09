@@ -1,4 +1,4 @@
-# EBA sprint backlog &mdash; what ENBD's team builds
+# EBA sprint backlog &mdash; what AnyBank's team builds
 
 **3-day innovation sprint.** This is the ordered work plan, calibrated to the
 gotchas this PoC surfaced. Each item links to the relevant `GOTCHAS.md`
@@ -18,7 +18,7 @@ entries; read those before estimating.
   from `LM-2` is in the runbook.
 - **Reason:** **LM-1 is the most important operational gotcha in this PoC.**
   The appliance OOM-killed our dev box and the VS Code remote crash signature
-  was uninformative. If the ENBD team hits this in front of leadership, the
+  was uninformative. If the AnyBank team hits this in front of leadership, the
   demo dies silently. Solve it before kickoff.
 - **GOTCHAS:** LM-1, LM-2.
 
@@ -75,7 +75,7 @@ entries; read those before estimating.
   ARM-path ResourceId, JSON-string Tags column) lands in `focus_costs`
   with v1.3-compliant column names (no deprecated `Provider` /
   `Publisher` &mdash; F-1) and a closed-set `ServiceCategory` (F-2).
-- **Reason:** Per SPEC §2, lead with Azure because it's ENBD's real
+- **Reason:** Per SPEC §2, lead with Azure because it's AnyBank's real
   near-term pain. The 'AI + Machine Learning' → 'AI and Machine
   Learning' mapping difference is a real bug source.
 - **GOTCHAS:** F-1, F-2, J-1.
@@ -91,7 +91,7 @@ entries; read those before estimating.
 
 ### B-6. The on-prem cost recharge module
 - **Done when:** `miq_onprem_cost` is populated from either (a) the MIQ
-  chargeback module's calculated output (preferred when ENBD already has
+  chargeback module's calculated output (preferred when AnyBank already has
   rates configured), or (b) the per-resource formula stub if not.
   Business-unit attribution is via tags or `sub_account_id`.
 - **Reason:** The PoC ships the stub (slice 6); the EBA team replaces it
@@ -134,7 +134,7 @@ entries; read those before estimating.
   not). The FOCUS community is standardising this (open FRs #2489/#2488/
   #2487, extending #2405) but it's not ratified. A gateway (Bedrock proxy /
   LiteLLM-style) sees model + tokens + team per request and removes that
-  provider-tag dependency — and future-proofs chargeback if ENBD routes all
+  provider-tag dependency — and future-proofs chargeback if AnyBank routes all
   AI through it. Scope it; don't build it in 3 days.
 - **GOTCHAS:** F-2, F-3.
 
@@ -154,7 +154,7 @@ entries; read those before estimating.
 ## What we DELIBERATELY left out (do not let scope creep eat the sprint)
 
 - CMP / Terraform remediation actions &mdash; this is not the engagement scope.
-- Real ENBD data &mdash; the synthetic data is the demo. Asking for real data
+- Real AnyBank data &mdash; the synthetic data is the demo. Asking for real data
   pulls legal+security review into the sprint and kills it.
 - Real cloud credentials &mdash; same reason.
 - A 4-year burndown / depreciation calc &mdash; rename it "monthly recharge"

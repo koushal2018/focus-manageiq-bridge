@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Synthetic data only; every row obviously fake — `DEMO-` names, fake account IDs (`FAKE_AWS_ACCOUNT_ID="999900001111"`, `FAKE_AZURE_SUBSCRIPTION`, `FAKE_OCI_TENANCY` in `generators/common.py`). Never real ENBD data, never real creds.
+- Synthetic data only; every row obviously fake — `DEMO-` names, fake account IDs (`FAKE_AWS_ACCOUNT_ID="999900001111"`, `FAKE_AZURE_SUBSCRIPTION`, `FAKE_OCI_TENANCY` in `generators/common.py`). Never real AnyBank data, never real creds.
 - Reporting currency is USD. **Never SUM mixed currencies** — always `billed_cost_usd`. Azure bills AED / prices USD (the B-6/B-7 bug class); keep that split.
 - FOCUS `ServiceCategory` is a closed, case-sensitive set (`normalizer/focus_spec.SERVICE_CATEGORIES_V1_3`). Non-conformant rows are reported and dropped, never invented.
 - All generator output is deterministic (seed `RNG_SEED=20260625`) so tests assert exact counts. Parameterized by `FOCUS_GEN_DAYS` (exists) and new `FOCUS_GEN_SCALE`.
@@ -556,7 +556,7 @@ Concretely, the AWS compute block becomes:
                 r = _base_row()
                 r.update({
                     "BillingAccountId": common.FAKE_AWS_ACCOUNT_ID,
-                    "BillingAccountName": "DEMO-ENBD-AWS",
+                    "BillingAccountName": "DEMO-AnyBank-AWS",
                     "SubAccountId": sub, "SubAccountName": sub,
                     "BillingPeriodStart": bps, "BillingPeriodEnd": bpe,
                     "ChargePeriodStart": cps, "ChargePeriodEnd": cpe,
@@ -580,7 +580,7 @@ Concretely, the AWS compute block becomes:
                 rows.append(r)
         # account-level non-usage charges (Tax/Purchase/Credit/Refund)
         rows.extend(_non_usage_rows(
-            rng, common.FAKE_AWS_ACCOUNT_ID, "DEMO-ENBD-AWS", bps, bpe, cps, cpe,
+            rng, common.FAKE_AWS_ACCOUNT_ID, "DEMO-AnyBank-AWS", bps, bpe, cps, cpe,
             "AWS", "Amazon Web Services, Inc.", "USD",
             {"x_Discounts": "0", "x_Operation": "", "x_ServiceCode": "AccountCharge"}))
 ```

@@ -6,7 +6,7 @@ description: Append a new entry to GOTCHAS.md in the house format with a collisi
 # Capture a gotcha
 
 GOTCHAS.md is the PoC's primary deliverable — 100+ entries with structured
-IDs, read by the ENBD team during the EBA sprint. This skill keeps new
+IDs, read by the AnyBank team during the EBA sprint. This skill keeps new
 entries collision-free and format-consistent.
 
 ## 1. Pick the family, allocate the ID
@@ -54,7 +54,7 @@ before any reserve sections. The format:
 ### <ID>. <One-line title stating the trap, not the topic>
 - **What:** What was hit, concretely — file/module names, the wrong value vs the right one, and the fix applied. Past tense, specific.
 - **Why it matters:** The trap for the next person — why the failure is non-obvious, what it would be misdiagnosed as, what class of bug it belongs to. Cross-reference related gotchas by ID (e.g. "the B-6/B-7 bug class").
-- **EBA action:** What the ENBD team should DO — imperative, actionable, framed for people rebuilding this during the sprint.
+- **EBA action:** What the AnyBank team should DO — imperative, actionable, framed for people rebuilding this during the sprint.
 ```
 
 Rules distilled from the existing 100+ entries:

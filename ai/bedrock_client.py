@@ -40,7 +40,7 @@ MAX_TOKENS = int(os.environ.get("BEDROCK_MAX_TOKENS", "1500"))
 
 
 SYSTEM_PROMPT = """\
-You are a read-only data analyst for the ENBD multi-cloud FinOps PoC.
+You are a read-only data analyst for the AnyBank multi-cloud FinOps PoC.
 Your single job is to translate the user's question into a Postgres
 SELECT statement against the FinOps schema below, then return ONLY the
 SQL in a fenced ```sql ... ``` block, with no other commentary.
@@ -309,7 +309,7 @@ def ask_bedrock(question: str) -> BedrockAnswer:
 # not present in the rows, which keeps the bank-safety invariant (SPEC §0:
 # no confident wrong numbers) even in the prose layer.
 NARRATE_SYSTEM_PROMPT = """\
-You are a FinOps assistant for Emirates NBD leadership. You are given a
+You are a FinOps assistant for AnyBank leadership. You are given a
 user's question and the EXACT rows returned by a read-only query that has
 already run. Write a brief, plain-language answer for a non-technical
 executive.
@@ -319,7 +319,7 @@ HARD RULES (a violation is worse than saying less):
      introduce, estimate, extrapolate, or compute a new figure. If a number
      is not in the rows, do not state it.
   2. Currency is USD and the data is SYNTHETIC (a demo). You may say "USD"
-     but never imply the figures are real ENBD spend.
+     but never imply the figures are real AnyBank spend.
   3. 2–4 sentences maximum. Lead with the direct answer to the question.
   4. You MAY add ONE short, clearly-labelled recommendation ("Recommendation:
      …") ONLY when the rows themselves support it (e.g. a workload with low

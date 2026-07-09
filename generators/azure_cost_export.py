@@ -88,11 +88,11 @@ def _row(
     ny = bp_start.year + (1 if bp_start.month == 12 else 0)
     bp_end = dt.date(ny, nm, 1) - dt.timedelta(days=1)
     return {
-        "InvoiceSectionName": "DEMO-ENBD-IT",
+        "InvoiceSectionName": "DEMO-AnyBank-IT",
         "AccountName": "DEMO Enrollment",
         "AccountOwnerId": "demo.owner@example.invalid",
         "SubscriptionId": common.FAKE_AZURE_SUBSCRIPTION,
-        "SubscriptionName": "DEMO-ENBD-Sub-Prod",
+        "SubscriptionName": "DEMO-AnyBank-Sub-Prod",
         "ResourceGroup": rg,
         "ResourceLocation": region,
         "Date": date.isoformat(),

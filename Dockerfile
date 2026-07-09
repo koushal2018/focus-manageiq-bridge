@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # =============================================================
-# ENBD Multi-Cloud FinOps PoC — production web image
+# AnyBank Multi-Cloud FinOps PoC — production web image
 # =============================================================
 # Multi-stage: a builder that compiles wheels, then a slim runtime
 # that carries only the venv + app code. Runs as a non-root user.

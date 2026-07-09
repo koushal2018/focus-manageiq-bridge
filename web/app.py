@@ -1,4 +1,4 @@
-"""FastAPI application for the ENBD multi-cloud FinOps PoC.
+"""FastAPI application for the AnyBank multi-cloud FinOps PoC.
 
 Four views (SPEC §3.5), each carrying an honest data-source banner that
 states where its data comes from and what FOCUS can/can't do.

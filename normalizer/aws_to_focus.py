@@ -165,7 +165,7 @@ def map_row(cur: dict[str, str]) -> MappedRow:
         "ListCost": float(cur.get("pricing/publicOnDemandCost", "") or unblended),
         "ContractedCost": unblended,
         # AWS CUR generator emits USD; FOCUS BillingCurrency depends on the
-        # account's preferences. For the PoC ENBD account the home currency
+        # account's preferences. For the PoC AnyBank account the home currency
         # is AED, so we don't carry USD through as BillingCurrency.
         # SPEC s3.1: the messiness here is that the source row is in USD
         # but the bank-side BillingCurrency is AED --- conversion happens

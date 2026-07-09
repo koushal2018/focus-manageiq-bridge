@@ -1,11 +1,11 @@
 # focus-manageiq-bridge
 
 **Bridges multi-cloud FOCUS cost data to ManageIQ inventory + utilization.**
-Built ahead of the Emirates NBD "Multi-Cloud Cost Optimization" EBA sprint,
-as a de-risking proof-of-concept the ENBD team inherits and builds on.
+Built ahead of the AnyBank "Multi-Cloud Cost Optimization" EBA sprint,
+as a de-risking proof-of-concept the AnyBank team inherits and builds on.
 
 > **All data is synthetic.** `DEMO-` prefixes, fake account IDs, no real
-> cloud credentials, no real ENBD data — by design (SPEC §0).
+> cloud credentials, no real AnyBank data — by design (SPEC §0).
 
 It ingests native **FOCUS** exports from AWS / Azure / OCI (or, for
 historical data, parses CUR / cost-export / usage-report formats),
@@ -112,7 +112,7 @@ deploy/       terraform (Aurora/VPC), OpenShift helm chart, CloudFront front doo
 docs/         production architecture, carbon roadmap, archived spec
 tests/        SQL-guard logic tests + DB-backed integrity tests (CI-gated)
 GOTCHAS.md    THE deliverable — every non-obvious issue, for the EBA team
-EBA-BACKLOG.md what ENBD builds during the 3-day sprint, in order
+EBA-BACKLOG.md what AnyBank builds during the 3-day sprint, in order
 ```
 
 ## Status

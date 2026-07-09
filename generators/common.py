@@ -16,7 +16,7 @@ import datetime as dt
 import random
 from typing import Iterable
 
-# Obvious-fake constants so no one mistakes any of this for real ENBD data.
+# Obvious-fake constants so no one mistakes any of this for real AnyBank data.
 # Per SPEC s3.1: synthetic data MUST be visibly synthetic.
 DEMO_PREFIX = "DEMO-"
 FAKE_AWS_ACCOUNT_ID = "999900001111"          # 12 digits, not a real account
@@ -334,7 +334,7 @@ def workload_vm_ids() -> dict[str, list[int]]:
 
 
 def usd_to_aed(usd: float) -> float:
-    """Pinned FX. Real ENBD will need a live FX feed --- a gotcha for later."""
+    """Pinned FX. Real AnyBank will need a live FX feed --- a gotcha for later."""
     return round(usd * USD_TO_AED, 6)
 
 

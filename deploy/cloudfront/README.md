@@ -1,4 +1,4 @@
-# CloudFront share — ENBD FinOps PoC (synthetic)
+# CloudFront share — AnyBank FinOps PoC (synthetic)
 
 A CloudFront distribution fronts the EC2-hosted console so it can be shared
 with the client and internal peer reviewers over **HTTPS with HTTP Basic Auth
@@ -11,7 +11,7 @@ bank-branded demo off the open internet.
 |---|---|
 | Distribution domain | `https://dk98mfrqqplu7.cloudfront.net` |
 | Distribution ID | `E2CJX2SLDSFI3Z` |
-| Edge auth function | `enbd-finops-basic-auth` (CloudFront Functions, viewer-request) |
+| Edge auth function | `anybank-finops-basic-auth` (CloudFront Functions, viewer-request) |
 | Origin | `ec2-32-195-142-246.compute-1.amazonaws.com:8000` (HTTP) |
 | Origin lock | SG `sg-03e1eecf3082d6208` ingress 8000 allowed **only** from prefix list `pl-3b927c52` (`com.amazonaws.global.cloudfront.origin-facing`) |
 | Cache / origin-request | `Managed-CachingDisabled` / `Managed-AllViewer` (forwards the `Authorization` header) |
@@ -43,10 +43,10 @@ Function code (base64) and were shared out-of-band. To see/rotate, see below.
 
 ```bash
 # 1. Create + publish the auth function (edit basic-auth.js EXPECTED first)
-aws cloudfront create-function --name enbd-finops-basic-auth \
+aws cloudfront create-function --name anybank-finops-basic-auth \
   --function-config Comment="Basic Auth",Runtime=cloudfront-js-2.0 \
   --function-code fileb://deploy/cloudfront/basic-auth.js --region us-east-1
-aws cloudfront publish-function --name enbd-finops-basic-auth --if-match <ETag>
+aws cloudfront publish-function --name anybank-finops-basic-auth --if-match <ETag>
 
 # 2. Lock the origin SG to CloudFront only
 aws ec2 authorize-security-group-ingress --group-id <sg-id> \
@@ -59,10 +59,10 @@ aws ec2 authorize-security-group-ingress --group-id <sg-id> \
 
 ```bash
 # edit the base64 in basic-auth.js (printf 'user:newpass' | base64), then:
-aws cloudfront update-function --name enbd-finops-basic-auth \
+aws cloudfront update-function --name anybank-finops-basic-auth \
   --function-config Comment="Basic Auth",Runtime=cloudfront-js-2.0 \
   --function-code fileb://deploy/cloudfront/basic-auth.js --if-match <ETag>
-aws cloudfront publish-function --name enbd-finops-basic-auth --if-match <new ETag>
+aws cloudfront publish-function --name anybank-finops-basic-auth --if-match <new ETag>
 # edge propagation ~seconds; no distribution change needed.
 ```
 
@@ -72,7 +72,7 @@ aws cloudfront publish-function --name enbd-finops-basic-auth --if-match <new ET
 aws cloudfront get-distribution-config --id E2CJX2SLDSFI3Z          # note ETag
 # set Enabled=false, update-distribution, wait Deployed, then:
 aws cloudfront delete-distribution --id E2CJX2SLDSFI3Z --if-match <ETag>
-aws cloudfront delete-function --name enbd-finops-basic-auth --if-match <ETag>
+aws cloudfront delete-function --name anybank-finops-basic-auth --if-match <ETag>
 # remove the SG rule so the origin port closes again:
 aws ec2 revoke-security-group-ingress --group-id sg-03e1eecf3082d6208 \
   --ip-permissions 'IpProtocol=tcp,FromPort=8000,ToPort=8000,PrefixListIds=[{PrefixListId=pl-3b927c52}]'

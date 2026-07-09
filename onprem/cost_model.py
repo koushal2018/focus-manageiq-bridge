@@ -2,7 +2,7 @@
 
 This module replaces what was originally going to be a thin wrapper over
 ManageIQ's `chargeback_rates` + `chargeback_rate_details` tables. After
-LM-1 retired the live appliance, we fell back to ENBD's own per-resource
+LM-1 retired the live appliance, we fell back to AnyBank's own per-resource
 formula (SPEC §0): vCPU rate + memory-GB rate, expressed as a monthly
 recharge number (see GOTCHA O-2 --- "burndown" was misleading).
 
@@ -84,7 +84,7 @@ def compute_rows(reference: dt.date | None = None) -> list[dict]:
                 f"Formula: {RATE_CPU_USD_PER_CORE_MONTH:.2f} USD/core/mo "
                 f"× {wl.cpu_cores} cores + {RATE_MEM_USD_PER_GB_MONTH:.2f} "
                 f"USD/GB/mo × {gb:.1f} GB. Stub rates --- replace with the "
-                "ENBD chargeback table per GOTCHA O-1."
+                "AnyBank chargeback table per GOTCHA O-1."
             ),
         })
     return rows

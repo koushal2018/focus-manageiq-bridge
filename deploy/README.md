@@ -3,9 +3,9 @@
 Infrastructure-as-code for the production target in
 [`../docs/production-architecture.md`](../docs/production-architecture.md):
 the FinOps console on **ROSA** (Red Hat OpenShift Service on AWS) backed by
-**Aurora/RDS PostgreSQL**, fronted by ENBD SSO, private.
+**Aurora/RDS PostgreSQL**, fronted by AnyBank SSO, private.
 
-> **Authored, not applied.** This was written for ENBD to deploy from a
+> **Authored, not applied.** This was written for AnyBank to deploy from a
 > credentialed session. It was NOT `terraform apply`'d from the PoC host —
 > that instance role has no eks/rds/ecr/iam permissions (GOTCHAS CX-4/CX-5).
 > Treat these files as the reviewed starting point, not a turnkey artifact.
@@ -27,17 +27,17 @@ deploy/
     README.md          oc/helm apply steps
 ```
 
-## Order of operations (ENBD, from a credentialed session)
+## Order of operations (AnyBank, from a credentialed session)
 
 1. **State backend** — set the S3 backend in `terraform/main.tf` (a bucket +
-   DynamoDB lock table ENBD already runs for Terraform state).
+   DynamoDB lock table AnyBank already runs for Terraform state).
 2. **Region** — confirm `var.region`. Pilot: `us-east-1`. Production with real
    cost data: `me-central-1` (GOTCHA P-1, residency).
 3. `terraform init && terraform plan` — review. `terraform apply` provisions
    VPC + RDS + ECR + Secrets Manager.
 4. **ROSA** — provision via `rosa create cluster` (see `rosa.tf` comments;
    ROSA is typically created with the `rosa` CLI / OCM, not pure Terraform).
-   Or use the Red Hat `rhcs` Terraform provider if ENBD standardizes on it.
+   Or use the Red Hat `rhcs` Terraform provider if AnyBank standardizes on it.
 5. **Image** — build + push the web image to the ECR repo. The
    `.github/workflows/image.yml` pipeline does this on a `v*` tag (or manual
    dispatch) via GitHub OIDC — set repo variables `AWS_ROLE_ARN`, `AWS_REGION`,
@@ -57,7 +57,7 @@ deploy/
      `miq.caBundlePath` (G-6, never verify=False).
    - `metrics.enabled` — Prometheus scrape annotations on the pod (OBS-1);
      `/metrics` is cluster-internal + unauthenticated by design.
-7. **SSO + Route** — wire the OpenShift Route to ENBD's IdP (OAuth proxy or
+7. **SSO + Route** — wire the OpenShift Route to AnyBank's IdP (OAuth proxy or
    the platform's existing SSO integration). The app-layer Basic Auth is a
    fallback; SSO at the Route is the production front door.
 

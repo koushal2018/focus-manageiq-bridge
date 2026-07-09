@@ -2,7 +2,7 @@
 
 Column names mirror the real CUR2 schema's slash-namespaced layout
 (`lineItem/UsageAccountId`, `product/ProductName`, etc.) so the normalizer
-exercises the same parsing the ENBD team will face on a real CUR export.
+exercises the same parsing the AnyBank team will face on a real CUR export.
 
 Messiness injected per SPEC s3.1:
   - A row with **blank ProductName** (forces ServiceCategory mapping to handle

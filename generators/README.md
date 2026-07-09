@@ -59,7 +59,7 @@ Everything uses `common.RNG_SEED` (`20260625`). Same seed → same output. Re-ru
 
 ## When to throw this away
 
-The whole `generators/` directory is throwaway. ENBD's real data will arrive via:
+The whole `generators/` directory is throwaway. AnyBank's real data will arrive via:
 
 - Real CUR exports from AWS into an S3 bucket (FOCUS-conformant or not).
 - Azure cost-management export to a storage account.

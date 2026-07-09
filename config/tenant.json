@@ -1,9 +1,9 @@
 {
-  "org_name": "Emirates NBD",
+  "org_name": "AnyBank",
   "product_name": "CloudLens FinOps",
-  "user_label": "ENBD User",
+  "user_label": "AnyBank User",
   "user_initials": "EU",
-  "environment_note": "synthetic data — no real ENBD data",
+  "environment_note": "synthetic data — no real AnyBank data",
   "reporting_currency": "USD",
   "fx_to_reporting": {
     "USD": 1.0,

@@ -1,5 +1,5 @@
 {% extends "_base.html" %}
-{% block title %}Connect a source · ENBD FinOps Console{% endblock %}
+{% block title %}Connect a source · AnyBank FinOps Console{% endblock %}
 {% block extra_css %}
   form#addf .grid2, form#upf .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
   form#addf label, form#upf label { display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-dim); }
@@ -92,14 +92,14 @@
 <div class="section-label"><span class="num">04.</span>Load a real-world sample</div>
 <div class="banner" role="note">
   <div>
-    <div class="label">Third-party sample · anonymized real data · not ENBD</div>
+    <div class="label">Third-party sample · anonymized real data · not AnyBank</div>
     <div class="text">
       Loads the <strong>FinOps Foundation's official FOCUS sample</strong>
       (<a href="https://github.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS-Sample-Data" style="color:var(--amber)">FOCUS-Sample-Data</a>,
       anonymized real AWS/Microsoft/Oracle billing, CC BY 4.0) through the same
       upload pipeline. It proves the platform ingests <strong>real-world FOCUS</strong>
       — including FOCUS 1.0 column names and literal <code class="mono">"NULL"</code>
-      values — not just our synthetic data. It is <strong>not ENBD data</strong>,
+      values — not just our synthetic data. It is <strong>not AnyBank data</strong>,
       and because it has no matching ManageIQ inventory it appears honestly as
       <code class="mono">unmatched_focus_only</code> in the join.
     </div>
@@ -149,7 +149,7 @@
     const data = await r.json();
     if (!r.ok) { el.innerHTML = banner('Rejected', esc(data.error || 'Load failed')); return; }
     el.innerHTML = banner('Loaded (real-world sample)',
-      'FinOps Foundation FOCUS sample ingested through the real pipeline — <strong>'+esc(data.dispatch.focus_rows)+'</strong> rows. Anonymized third-party data, not ENBD. Reloading…');
+      'FinOps Foundation FOCUS sample ingested through the real pipeline — <strong>'+esc(data.dispatch.focus_rows)+'</strong> rows. Anonymized third-party data, not AnyBank. Reloading…');
     setTimeout(() => location.reload(), 1400);
   });
   document.getElementById('addf').addEventListener('submit', async e => {

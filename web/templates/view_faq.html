@@ -20,8 +20,8 @@
   <div>
     <div class="label">About this PoC</div>
     <div class="text">
-      A 3-day de-risking spike for the ENBD multi-cloud cost engagement. The point is to show what a
-      FOCUS-conformant console <em>can</em> and <em>can't</em> answer — honestly — before ENBD's team builds the
+      A 3-day de-risking spike for the AnyBank multi-cloud cost engagement. The point is to show what a
+      FOCUS-conformant console <em>can</em> and <em>can't</em> answer — honestly — before AnyBank's team builds the
       real thing. <strong>Every figure here is synthetic</strong> (<code class="mono" style="color:var(--accent-deep)">DEMO-</code>
       prefixed) and USD-normalised. This page answers the questions we get asked most.
     </div>
@@ -40,10 +40,10 @@
 
 <div class="section-label"><span class="num">01.</span>The basics</div>
 <div class="faq-group">
-  <details class="faq-q"><summary>Is this real Emirates NBD data?</summary>
+  <details class="faq-q"><summary>Is this real AnyBank data?</summary>
     <div class="faq-a"><p><strong>No.</strong> Every number, account ID, resource name and workload is synthetic and prefixed
     <code>DEMO-</code> so it can never be mistaken for production. Account IDs are fake, costs are generated, and no real
-    cloud credentials or ENBD systems are connected. The shapes are realistic; the values are invented.</p></div>
+    cloud credentials or AnyBank systems are connected. The shapes are realistic; the values are invented.</p></div>
   </details>
   <details class="faq-q"><summary>What does this PoC actually demonstrate?</summary>
     <div class="faq-a"><p>That multi-cloud cost (AWS, Azure, OCI) plus on-prem can be normalised to the
@@ -51,7 +51,7 @@
     against four leadership requirements — each with an honest verdict on whether FOCUS handles it
     <strong>natively, partially, conditionally, or not at all</strong>. Verdicts before numbers.</p></div>
   </details>
-  <details class="faq-q"><summary>Why USD when ENBD reports in AED?</summary>
+  <details class="faq-q"><summary>Why USD when AnyBank reports in AED?</summary>
     <div class="faq-a"><p>AED is pegged to USD at <strong>3.6725</strong>, so we normalise every provider's cost to USD as a
     single reporting currency. Mixing currencies in a total is the classic silent error — Azure bills in AED, AWS/OCI in
     USD. The console always shows the USD-normalised figure and labels the source currency separately so nothing is mixed.</p></div>
@@ -70,7 +70,7 @@
   <details class="faq-q"><summary>Where does the on-prem cost come from?</summary>
     <div class="faq-a"><p>FOCUS doesn't source on-prem data. The on-prem half is a <strong>per-resource recharge model</strong>
     (a vCPU rate + a memory-GB rate per month) applied to ManageIQ inventory. The rates here are
-    <strong>illustrative stubs</strong> — ENBD's chargeback owner substitutes the real numbers. It's labelled
+    <strong>illustrative stubs</strong> — AnyBank's chargeback owner substitutes the real numbers. It's labelled
     "estimated" wherever it appears.</p></div>
   </details>
   <details class="faq-q"><summary>Can I trust the per-workload costs?</summary>
@@ -106,7 +106,7 @@
       <em>authoritative cost</em> (it's what you're actually invoiced), and the gateway provides the
       <em>usage dimensions</em> (model, tokens, team) to attribute that cost — the same shape as the FOCUS↔ManageIQ
       join elsewhere in this console (cost from one source, the breakdown dimension from another). It also future-proofs:
-      if ENBD standardises AI access behind a gateway, the per-model and chargeback story stops depending on how each
+      if AnyBank standardises AI access behind a gateway, the per-model and chargeback story stops depending on how each
       provider tags <code>SkuMeter</code>.</p>
       <p>It's a roadmap option, not built in this PoC — but it's the natural next step for AI cost attribution and worth
       scoping in the sprint.</p>
@@ -133,7 +133,7 @@
   <details class="faq-q"><summary>What model is it, and where does my question go?</summary>
     <div class="faq-a"><p>Amazon Bedrock, Claude Sonnet, via the <strong>us-east-1</strong> cross-region inference profile.
     For this synthetic demo the question text leaves the Gulf to a US commercial region — acceptable because the data is
-    fake. For real ENBD data this is a <strong>residency decision for legal</strong> (me-central-1 has no on-demand
+    fake. For real AnyBank data this is a <strong>residency decision for legal</strong> (me-central-1 has no on-demand
     Claude today; the alternative is the global inference profile). The console works fully with the AI turned off — the
     canned queries never touch Bedrock.</p></div>
   </details>
@@ -155,10 +155,10 @@
   <details class="faq-q"><summary>Is this production-ready?</summary>
     <div class="faq-a"><p>No — it's a de-risking spike. It runs as a one-command Docker stack and is portable to AWS or
     on-prem. The production architecture (ROSA/OpenShift + Aurora, connector framework, Secrets Manager) is designed and
-    documented, not deployed. The real deliverable is the captured set of gotchas so ENBD's team builds the real thing
+    documented, not deployed. The real deliverable is the captured set of gotchas so AnyBank's team builds the real thing
     faster.</p></div>
   </details>
-  <details class="faq-q"><summary>How would ENBD connect a real cloud account?</summary>
+  <details class="faq-q"><summary>How would AnyBank connect a real cloud account?</summary>
     <div class="faq-a"><p>Via the <strong>Connect</strong> page — onboarding a source is a registry entry plus a credential
     reference, never a code change. In this PoC a registered source reads a synthetic export; in production the same
     adapter reads the provider's real FOCUS export from S3/blob using a Secrets Manager credential. The dispatcher

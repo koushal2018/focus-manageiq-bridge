@@ -1,8 +1,8 @@
 # Carbon footprint roadmap
 
-**Status:** ENBD multi-cloud FinOps PoC, slice 8.
+**Status:** AnyBank multi-cloud FinOps PoC, slice 8.
 **Date frozen:** 2026-06-26.
-**Audience:** ENBD engineering + finance leadership reviewing requirement #4
+**Audience:** AnyBank engineering + finance leadership reviewing requirement #4
 ("Carbon footprint" in the original brief).
 
 ---
@@ -34,8 +34,8 @@ must build the assembly themselves; no single vendor ships it.
 - **Reach:** Scope 2 only. Scope 1 (direct emissions) and Scope 3 (supply chain)
   are not in CCFT. AWS publishes its own Scope 3 in its annual sustainability
   report.
-- **Where it falls short for ENBD:** Per-account is too coarse for chargeback
-  by business unit unless ENBD already splits BUs into separate AWS accounts
+- **Where it falls short for AnyBank:** Per-account is too coarse for chargeback
+  by business unit unless AnyBank already splits BUs into separate AWS accounts
   (and the CCFT mapping then mirrors that split exactly).
 - **EBA wiring sketch:**
   - Enable CCFT S3 export on the payer account.
@@ -50,7 +50,7 @@ must build the assembly themselves; no single vendor ships it.
 - **What:** Power BI dashboard published by Microsoft, free. Per-subscription
   emissions in metric tons CO<sub>2</sub>e, monthly, with similar lag.
 - **Format:** **Power BI export to Excel/CSV is supported**, no programmatic
-  API at time of writing (2026-06). For automation, ENBD must shim through
+  API at time of writing (2026-06). For automation, AnyBank must shim through
   the Power BI REST API.
 - **Granularity:** Per Azure subscription, per service category, monthly.
 - **Reach:** Scope 1, 2, **and partial Scope 3** (a meaningful differentiator
@@ -72,15 +72,15 @@ must build the assembly themselves; no single vendor ships it.
   store the output in a `carbon_estimates_oci` table flagged as estimated, not
   measured. **The data-source banner in the web layer MUST surface this distinction.**
 
-### On-prem (ENBD data centers) &mdash; **custom model**
+### On-prem (AnyBank data centers) &mdash; **custom model**
 
-- **What:** ENBD owns the data centers, so ENBD also owns the model. There is
+- **What:** AnyBank owns the data centers, so AnyBank also owns the model. There is
   no vendor to ask.
 - **Inputs needed:**
   - **kWh per VM** &mdash; ManageIQ does not measure power directly. Derived
     from CPU utilization × server TDP (thermal design power) + a constant for
     memory + storage.
-  - **Power Usage Effectiveness (PUE)** &mdash; per ENBD DC. Multiplies IT
+  - **Power Usage Effectiveness (PUE)** &mdash; per AnyBank DC. Multiplies IT
     power by ~1.3–1.5 to include cooling overhead.
   - **Grid carbon intensity** &mdash; UAE grid: **published by the IEA at
     roughly 0.45 kgCO<sub>2</sub>e per kWh** (verify against the latest

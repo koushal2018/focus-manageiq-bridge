@@ -37,7 +37,7 @@ bedrock:
 # set these to rebrand a deploy WITHOUT rebuilding (env wins over the file).
 # Leave blank to use the image's config/tenant.json as-is.
 tenant:
-  orgName: ""             # e.g. "Emirates NBD"
+  orgName: ""             # e.g. "AnyBank"
   productName: ""         # e.g. "CloudLens FinOps"
   # Reporting currency is pinned to USD today (the pipeline normalizes to USD;
   # PKG-2 tracks making it configurable). Leave blank; a non-USD value fails

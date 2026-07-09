@@ -1,9 +1,9 @@
 # =============================================================
 # ROSA (Red Hat OpenShift Service on AWS) — the web tier host.
-# Chosen over EKS because ENBD is an OpenShift shop and ManageIQ is Red Hat
+# Chosen over EKS because AnyBank is an OpenShift shop and ManageIQ is Red Hat
 # lineage (GOTCHA P-2). The same PoC container image runs here unchanged.
 #
-# IMPORTANT — two provisioning paths; pick one with ENBD's platform team:
+# IMPORTANT — two provisioning paths; pick one with AnyBank's platform team:
 #
 #   (A) rosa CLI / OCM (most common, recommended for first cluster):
 #       rosa create account-roles --mode auto
@@ -18,7 +18,7 @@
 #         --private-link            # private cluster, bank posture
 #       The cluster lands in THIS VPC's private subnets (network.tf).
 #
-#   (B) terraform-redhat/rhcs provider (if ENBD standardizes ROSA in TF):
+#   (B) terraform-redhat/rhcs provider (if AnyBank standardizes ROSA in TF):
 #       the rhcs_cluster_rosa_hcp resource below is a skeleton to fill.
 #       Requires RHCS_TOKEN + the account/operator roles created first.
 #

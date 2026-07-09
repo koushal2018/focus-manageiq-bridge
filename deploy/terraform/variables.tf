@@ -12,7 +12,7 @@ variable "region" {
 variable "project" {
   description = "Name prefix for all resources."
   type        = string
-  default     = "enbd-finops"
+  default     = "anybank-finops"
 }
 
 variable "environment" {
@@ -26,7 +26,7 @@ variable "environment" {
 }
 
 variable "vpc_cidr" {
-  description = "VPC CIDR. Adjust to fit ENBD's IPAM allocation."
+  description = "VPC CIDR. Adjust to fit AnyBank's IPAM allocation."
   type        = string
   default     = "10.60.0.0/16"
 }
@@ -69,7 +69,7 @@ variable "db_deletion_protection" {
 # --- ROSA ---
 variable "rosa_cluster_name" {
   type    = string
-  default = "enbd-finops"
+  default = "anybank-finops"
 }
 
 variable "rosa_compute_nodes" {
@@ -87,7 +87,7 @@ variable "tags" {
   description = "Tags applied to all resources."
   type        = map(string)
   default = {
-    project    = "enbd-finops"
+    project    = "anybank-finops"
     managed-by = "terraform"
     data-class = "synthetic-pilot" # set to 'confidential' for prod real data
   }

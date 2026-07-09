@@ -1,6 +1,6 @@
 {{- if .Values.route.enabled }}
 # OpenShift Route — the bank-native ingress (not an ALB Ingress; P-2).
-# Front this with ENBD's IdP via the cluster's OAuth/SSO integration so the
+# Front this with AnyBank's IdP via the cluster's OAuth/SSO integration so the
 # dashboard is authenticated and private (production-architecture.md access).
 apiVersion: route.openshift.io/v1
 kind: Route
