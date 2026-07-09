@@ -1,6 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "PATH": "/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin"
+  },
   "permissions": {
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~/*)",
+      "Edit(SPEC.md)",
+      "Write(SPEC.md)"
+    ],
     "ask": [
       "Bash(git push *)",
       "Bash(git push --force *)",
@@ -9,16 +18,7 @@
       "Bash(git branch -D *)",
       "Bash(git clean -f *)",
       "Bash(git checkout -- *)"
-    ],
-    "deny": [
-      "Bash(rm -rf /*)",
-      "Bash(rm -rf ~/*)",
-      "Edit(SPEC.md)",
-      "Write(SPEC.md)"
     ]
-  },
-  "env": {
-    "PATH": "/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin"
   },
   "hooks": {
     "PreToolUse": [
@@ -27,14 +27,14 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git commit *)",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/secret-guard.sh\"",
+            "if": "Bash(git commit *)",
             "timeout": 10
           },
           {
             "type": "command",
-            "if": "Bash(git push *)",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/secret-guard.sh\"",
+            "if": "Bash(git push *)",
             "timeout": 10
           }
         ]
@@ -53,6 +53,17 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/currency-tripwire.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/gotchas-guard.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "f=\"$(jq -r '.tool_response.filePath // .tool_input.file_path // empty')\"; case \"$f\" in */ai/sql_guard.py|*/web/queries.py) cd \"$CLAUDE_PROJECT_DIR\" && .venv/bin/python -m pytest tests/test_sql_guard.py -q --no-header -x 2>&1 | tail -3 ;; esac; exit 0",
+            "timeout": 30,
+            "statusMessage": "sql_guard fast tests"
           }
         ]
       }
@@ -90,5 +101,8 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "deploy-on-aws@claude-plugins-official": true
   }
 }
