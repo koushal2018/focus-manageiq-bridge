@@ -146,8 +146,7 @@ entries; read those before estimating.
 
 ### B-10. **Live demo dress rehearsal**, twice, on the real demo box
 - **Done when:** The full `generators → normalizer → join → loader →
-  web` pipeline runs end to end in front of a tougher reviewer than
-  Sean. Memory headroom is confirmed; the appliance does not OOM.
+  web` pipeline runs end to end in front of a tough internal reviewer first. Memory headroom is confirmed; the appliance does not OOM.
 - **Reason:** Don't do the first dress rehearsal in front of leadership.
 
 ---

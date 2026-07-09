@@ -10,7 +10,7 @@
 
 **This is a throwaway de-risking spike, not a product.** Its primary purpose is to let the AWS team
 (Koushal) walk into the planned 3-day **EBA innovation sprint** already knowing where the ENBD
-engineering team (Harsha Vardhan's group) will get stuck — so the team can build the real thing
+engineering team will get stuck — so the team can build the real thing
 **themselves** during the EBA, faster.
 
 Therefore:
@@ -36,9 +36,9 @@ Therefore:
 - Existing ManageIQ cost calc = **vCPU + memory + per-GB cost over 4 years**, monthly/daily burndown.
 - **Open decision:** host the DB on-prem vs. in AWS (data-transfer cost). → keep everything portable.
 - **Security signals to respect:** Ahmed asked about prompt injection / system prompts / caching;
-  Sean flagged data sensitivity (competitors must not see their data). Bedrock data residency in MENAT
+  Leadership flagged data sensitivity (competitors must not see their data). Bedrock data residency in MENAT
   is constrained (Global inference profile only from me-central-1) — treat the AI layer carefully.
-- **Strategic framing (Sean):** be the **first bank in MENA** to do multi-cloud FOCUS customization.
+- **Strategic framing (leadership):** be the **first bank in MENA** to do multi-cloud FOCUS customization.
   → correctness matters more than flash. A confidently-wrong number is worse than no number.
 
 ---
@@ -114,7 +114,7 @@ teaches nothing, then the real gotcha ambushes the team during the EBA. Inject, 
 - Mixed currencies (AED/USD) to exercise `BillingCurrency` vs `PricingCurrency`
 
 Data must be **obviously synthetic** (fake account IDs, "DEMO-" prefixes) so no one mistakes it for ENBD
-data — this defuses Sean's data-sensitivity concern during the demo.
+data — this defuses the leadership data-sensitivity concern during the demo.
 
 ### 3.2 FOCUS normalizer  `/normalizer`
 Maps each provider-native format → FOCUS columns. Validates conformance: `ServiceCategory` mandatory &

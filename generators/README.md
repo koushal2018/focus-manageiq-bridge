@@ -17,7 +17,7 @@ A clean fixture set hides the join problem and makes the PoC pointless. SPEC §3
 | Duplicate and late-arriving records | `aws_cur.py` duplicate row + 2026-05-31 late row | idempotent-load discipline |
 | Bedrock AI line items (per-model) | `aws_cur.py` BEDROCK_MODELS loop | SPEC requirement #1 demo data |
 | Mixed currencies (AED/USD) | All cloud generators; `usd_to_aed()` in `common` | FOCUS BillingCurrency vs PricingCurrency |
-| Obviously synthetic data | `DEMO-` prefix, fake account IDs, `???.invalid` emails | Sean's data-sensitivity concern |
+| Obviously synthetic data | `DEMO-` prefix, fake account IDs, `???.invalid` emails | Leadership data-sensitivity concern (SPEC §0) |
 
 ## What each file does
 
