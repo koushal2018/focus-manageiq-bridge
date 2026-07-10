@@ -305,9 +305,13 @@ def _assert_conformant_in_txn(cur) -> None:
     # compose with pgsql.Identifier (quoted) rather than f-string interpolation.
     from psycopg2 import sql as pgsql
     for col in _LOAD_MANDATORY_NONNULL:
-        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query — this IS the safe pattern: psycopg2.sql composition with a quoted Identifier (identifiers cannot be bind parameters); no string concatenation occurs.
-        cur.execute(pgsql.SQL("SELECT COUNT(*) FROM focus_costs WHERE {} IS NULL")
-                    .format(pgsql.Identifier(col)))
+        # Compose the identifier separately from execute(): psycopg2.sql with a
+        # quoted Identifier is the safe pattern (identifiers cannot be bind
+        # params), and keeping .format() out of the execute() call also keeps
+        # string-concat scanners from misreading it as raw formatting (SEC-8).
+        q = pgsql.SQL("SELECT COUNT(*) FROM focus_costs WHERE {} IS NULL").format(
+            pgsql.Identifier(col))
+        cur.execute(q)
         n = cur.fetchone()[0]
         if n:
             problems.append(f"{n} row(s) with NULL {col}")

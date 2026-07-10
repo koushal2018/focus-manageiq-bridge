@@ -5,20 +5,38 @@ with the client and internal peer reviewers over **HTTPS with HTTP Basic Auth
 at the edge**. The data is synthetic (`DEMO-*`); the auth gate keeps a
 bank-branded demo off the open internet.
 
+> **Live identifiers redacted for the customer share (SEC-8).** Distribution
+> ID, origin hostname/IP, and security-group ID below are shown as
+> `<PLACEHOLDER>`. The real values live only in the operator's AWS account and
+> the out-of-band runbook — never in this repo. Substitute your own when
+> reproducing.
+
 ## What's deployed (live)
 
 | Piece | Value |
 |---|---|
-| Distribution domain | `https://dk98mfrqqplu7.cloudfront.net` |
-| Distribution ID | `E2CJX2SLDSFI3Z` |
+| Distribution domain | `https://<DIST-SUBDOMAIN>.cloudfront.net` |
+| Distribution ID | `E<REDACTED>` |
 | Edge auth function | `anybank-finops-basic-auth` (CloudFront Functions, viewer-request) |
-| Origin | `ec2-32-195-142-246.compute-1.amazonaws.com:8000` (HTTP) |
-| Origin lock | SG `sg-03e1eecf3082d6208` ingress 8000 allowed **only** from prefix list `pl-3b927c52` (`com.amazonaws.global.cloudfront.origin-facing`) |
+| Origin | `ec2-<REDACTED>.compute-1.amazonaws.com:8000` (HTTP — see origin-encryption note) |
+| Origin lock | SG `sg-<REDACTED>` ingress 8000 allowed **only** from the managed prefix list `com.amazonaws.global.cloudfront.origin-facing` |
 | Cache / origin-request | `Managed-CachingDisabled` / `Managed-AllViewer` (forwards the `Authorization` header) |
 | Viewer protocol | redirect-to-HTTPS |
 
 **Credentials** are NOT committed. They live only in the published CloudFront
 Function code (base64) and were shared out-of-band. To see/rotate, see below.
+
+### Origin encryption (CloudFront → EC2)
+
+CloudFront serves **HTTPS to viewers** (redirect-to-HTTPS), but the
+CloudFront→origin hop here is **HTTP on :8000**, so it is unencrypted across
+the AWS network between the edge and the EC2 origin. This is an accepted
+limitation of the throwaway PoC share (synthetic `DEMO-*` data only, origin
+locked to the CloudFront prefix list). **It is NOT a production posture.** For
+production, terminate TLS at the origin (ACM/private CA cert on the app or an
+ALB in front of it) and set the CloudFront origin protocol policy to
+`https-only` — the production target (`docs/production-architecture.md`) puts
+the app behind a private ALB with TLS, so this hop is encrypted there.
 
 ## Architecture (why each piece)
 
@@ -69,13 +87,13 @@ aws cloudfront publish-function --name anybank-finops-basic-auth --if-match <new
 ## Tear down (when the demo window closes)
 
 ```bash
-aws cloudfront get-distribution-config --id E2CJX2SLDSFI3Z          # note ETag
+aws cloudfront get-distribution-config --id <DIST-ID>          # note ETag
 # set Enabled=false, update-distribution, wait Deployed, then:
-aws cloudfront delete-distribution --id E2CJX2SLDSFI3Z --if-match <ETag>
+aws cloudfront delete-distribution --id <DIST-ID> --if-match <ETag>
 aws cloudfront delete-function --name anybank-finops-basic-auth --if-match <ETag>
 # remove the SG rule so the origin port closes again:
-aws ec2 revoke-security-group-ingress --group-id sg-03e1eecf3082d6208 \
-  --ip-permissions 'IpProtocol=tcp,FromPort=8000,ToPort=8000,PrefixListIds=[{PrefixListId=pl-3b927c52}]'
+aws ec2 revoke-security-group-ingress --group-id <sg-id> \
+  --ip-permissions 'IpProtocol=tcp,FromPort=8000,ToPort=8000,PrefixListIds=[{PrefixListId=<cloudfront-origin-facing-pl>}]'
 ```
 
 ## Caveats for reviewers

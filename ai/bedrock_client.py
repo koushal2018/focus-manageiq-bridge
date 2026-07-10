@@ -1,5 +1,26 @@
 """Thin Bedrock Converse-API wrapper for NL-to-SQL.
 
+SECURITY WARNING — HIGH-RISK PATTERN, READ BEFORE COPYING.
+"User input -> LLM -> SQL execution" is inherently dangerous: no validator
+over model output is provably complete, and a prompt-injected question can
+steer generation. This file is only acceptable because ALL of these layers
+exist together — copying the pattern without every one of them creates an
+exploitable application:
+  1. AST-level validation (ai/sql_guard.py): sqlglot parse, single-statement,
+     SELECT-only, table ALLOWLIST, forbidden-node walk — not regex.
+  2. Database-enforced containment (web/db.py query_untrusted): READ ONLY
+     transaction + statement_timeout, enforced by Postgres itself, so SQL
+     that talks its way past layer 1 still cannot write or run unbounded.
+     Production must additionally use a dedicated SELECT-only DB role
+     (GOTCHAS SEC-5).
+  3. Adversarial-prompt tests (tests/test_sql_guard.py) exercising the guard
+     against injection-shaped inputs.
+  4. This free-text tier is OPT-IN (BEDROCK_DISABLED=1 default) and sits
+     BEHIND the safe tier: canned, parameterized queries (ai/canned.py) where
+     the model never controls SQL structure. Prefer that tier — reach for
+     free-text only when canned queries genuinely cannot express the need.
+This pattern requires expert security review before any production use.
+
 Defaults to us-east-1 via the US cross-region inference profile
 (`us.anthropic.…`). me-central-1 does NOT host Claude (residency gotcha
 B-1 / G-10): a Gulf-resident bank must accept either the global inference

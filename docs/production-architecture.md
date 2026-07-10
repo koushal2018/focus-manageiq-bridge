@@ -86,7 +86,7 @@ me-central-1 (UAE) for production on real data** (P-1).
 
 | Axis | Decision | Rationale |
 |---|---|---|
-| Platform host | **AWS**, region-parameterized | Managed Aurora/Bedrock; ManageIQ stays where it is (on-prem). |
+| Infrastructure host | **AWS**, region-parameterized | Managed Aurora/Bedrock; ManageIQ stays where it is (on-prem). |
 | Region — pilot | **us-east-1** | Simpler, best Bedrock availability, synthetic data only. |
 | Region — prod | **me-central-1 (UAE)** | Real cost data residency (P-1). Decision is explicit, not default. |
 | FOCUS store | **Aurora PostgreSQL** | Direct lift of the PoC schema + loader + queries. Right-sized for one bank's cost volume (millions of rows/month). Migration friction ≈ zero (D-1). |
