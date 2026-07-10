@@ -409,7 +409,7 @@
       try{
         var r=await fetch('/ai/status'); var s=await r.json();
         aiOn=s.bedrock_enabled;
-        stateEl.innerHTML = aiOn ? '<span class="on">● on</span> · '+s.model : '<span class="off">● off</span> · canned only';
+        stateEl.innerHTML = aiOn ? '<span class="on">● on</span> · '+esc(s.model) : '<span class="off">● off</span> · canned only';
         if(!aiOn){ input.disabled=true; send.disabled=true; freeNote.innerHTML='<span style="color:var(--accent-deep)">· disabled this session</span>'; }
         var qs=s.canned_queries||[];
         chips.innerHTML = qs.length ? '' : '<span class="ask-note">No canned queries registered.</span>';

@@ -26,17 +26,29 @@ bank-branded demo off the open internet.
 **Credentials** are NOT committed. They live only in the published CloudFront
 Function code (base64) and were shared out-of-band. To see/rotate, see below.
 
-### Origin encryption (CloudFront → EC2)
+### Origin encryption (CloudFront → origin)
 
-CloudFront serves **HTTPS to viewers** (redirect-to-HTTPS), but the
-CloudFront→origin hop here is **HTTP on :8000**, so it is unencrypted across
-the AWS network between the edge and the EC2 origin. This is an accepted
-limitation of the throwaway PoC share (synthetic `DEMO-*` data only, origin
-locked to the CloudFront prefix list). **It is NOT a production posture.** For
-production, terminate TLS at the origin (ACM/private CA cert on the app or an
-ALB in front of it) and set the CloudFront origin protocol policy to
-`https-only` — the production target (`docs/production-architecture.md`) puts
-the app behind a private ALB with TLS, so this hop is encrypted there.
+**The pattern to copy — encrypt the origin hop end-to-end:**
+
+1. Put an **Application Load Balancer** in front of the app with an **ACM
+   certificate** (CloudFront requires a publicly-trusted cert on custom
+   origins; ACM issues and rotates it for free):
+   `aws acm request-certificate --domain-name <origin.your-domain> --validation-method DNS`
+2. Point the CloudFront origin at the ALB's HTTPS listener and set the origin
+   protocol policy to **`https-only`** (plus `OriginSslProtocols: TLSv1.2`).
+3. Keep the SG chain locked: ALB ingress 443 from the CloudFront
+   origin-facing prefix list only; app SG ingress from the ALB SG only.
+
+That is the configuration the production target uses
+(`docs/production-architecture.md`: private ALB, TLS on every hop). Anyone
+reproducing this front-door for real data must implement it as above.
+
+**This demo's accepted deviation:** the throwaway PoC origin serves the app
+port directly, without an ALB, so the edge→origin hop is not TLS-terminated
+at the origin. Accepted ONLY because the data is synthetic (`DEMO-*`), the
+origin is reachable solely from the CloudFront prefix list, and the whole
+stack is torn down after the demo window. Do not carry this deviation
+anywhere real data flows.
 
 ## Architecture (why each piece)
 
