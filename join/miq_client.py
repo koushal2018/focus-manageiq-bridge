@@ -4,7 +4,7 @@ Per GOTCHA G-2: ManageIQ token auth uses X-Auth-Token, NOT Authorization
 Bearer. We default to HTTP Basic because that works per-request without
 maintaining a session token. Auth credentials come from MIQ_USER /
 MIQ_PASS env vars; MIQ_PASS has NO default --- the appliance factory
-default (admin:smartvm, GOTCHA G-1) must be typed deliberately, never
+default (GOTCHA G-1) must be typed deliberately, never
 inherited silently by copy-pasted code.
 
 Per GOTCHA G-6: we trust the appliance cert by setting REQUESTS_CA_BUNDLE
@@ -39,7 +39,7 @@ def _basic_auth_header(user: str, password: str) -> str:
 
 
 def _require_password(password: str | None) -> str:
-    """MIQ_PASS has no baked-in default (G-1): a hardcoded 'smartvm'
+    """MIQ_PASS has no baked-in default (G-1): a hardcoded vendor password
     fallback travels into non-PoC deployments by copy-paste."""
     password = password or os.environ.get("MIQ_PASS")
     if not password:

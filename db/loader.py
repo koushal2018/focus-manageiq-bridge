@@ -37,7 +37,26 @@ _NULL_SENTINELS = {"NULL", "null", "None", "NONE", "N/A", "n/a", "nan", "NaN"}
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FOCUS_CSV = os.path.join(ROOT, "out", "normalizer", "focus_combined.csv")
 JOIN_CSV = os.path.join(ROOT, "out", "join", "resource_join_map.csv")
-MIQ_UTIL_JSON = os.environ.get(
+
+
+def _confined_out_path(env_var: str, default: str) -> str:
+    """Resolve an env-supplied file path, confined to the repo's out/ tree.
+
+    Env vars are config, but config can be attacker-influenced in a copied
+    deployment — realpath + prefix check stops a crafted value (../, symlink)
+    from making the loader read arbitrary files (SEC-11 path-traversal guard).
+    """
+    value = os.environ.get(env_var, default)
+    out_dir = os.path.realpath(os.path.join(ROOT, "out"))
+    resolved = os.path.realpath(value)
+    if not resolved.startswith(out_dir + os.sep):
+        raise ValueError(
+            f"{env_var} must point inside {out_dir!r} (got {value!r}) — "
+            "refusing to read files outside the pipeline's output tree.")
+    return resolved
+
+
+MIQ_UTIL_JSON = _confined_out_path(
     "MIQ_UTIL_JSON", os.path.join(ROOT, "out", "miq", "metric_rollups.json")
 )
 

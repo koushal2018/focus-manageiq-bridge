@@ -323,17 +323,35 @@
     async function postJSON(u,b){ var r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
       var t=await r.text(); var d; try{d=JSON.parse(t);}catch(_){d={detail:t};} return {ok:r.ok,status:r.status,data:d}; }
 
-    // Escape EVERY dynamic value (column names AND cells) — uploaded FOCUS
-    // text columns are not sanitized at ingest, so any of them can carry
-    // markup. Same rule as view_ai_query.html; see GOTCHAS SEC-6.
-    function rows2html(rows){
-      if(!rows||!rows.length) return '<p class="ask-note">(0 rows)</p>';
-      var cols=Object.keys(rows[0]); var h='<table class="data"><thead><tr>';
-      cols.forEach(function(c){h+='<th scope="col">'+esc(c)+'</th>';}); h+='</tr></thead><tbody>';
-      rows.forEach(function(r){ h+='<tr>'; cols.forEach(function(c){ var v=r[c]; h+='<td class="mono">'+(v===null?'<span style="color:var(--ink-faint)">null</span>':esc(String(v)))+'</td>'; }); h+='</tr>'; });
-      return h+'</tbody></table>';
+    // Safe-by-default DOM construction (SEC-10): every dynamic value —
+    // column names, cells, SQL, narration, errors — is set via textContent,
+    // which the browser never parses as markup. Uploaded FOCUS text columns
+    // are not sanitized at ingest, so this is load-bearing, not style.
+    function el(tag, cls, text){
+      var n=document.createElement(tag);
+      if(cls) n.className=cls;
+      if(text!==undefined && text!==null) n.textContent=text;
+      return n;
     }
-    function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function rows2table(rows){
+      if(!rows||!rows.length) return el('p','ask-note','(0 rows)');
+      var cols=Object.keys(rows[0]);
+      var table=el('table','data'), thead=el('thead'), htr=el('tr');
+      cols.forEach(function(c){ var th=el('th',null,c); th.setAttribute('scope','col'); htr.appendChild(th); });
+      thead.appendChild(htr); table.appendChild(thead);
+      var tbody=el('tbody');
+      rows.forEach(function(r){
+        var tr=el('tr');
+        cols.forEach(function(c){
+          var v=r[c], td=el('td','mono');
+          if(v===null){ var s=el('span',null,'null'); s.style.color='var(--ink-faint)'; td.appendChild(s); }
+          else td.textContent=String(v);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody); return table;
+    }
     // Map transport/status into the product's own voice — never show "HTTP 503".
     function friendlyError(status, data){
       if(status===503) return 'AI answers are off this session — the canned queries above still run.';
@@ -373,20 +391,35 @@
     }
     var lastQuestion='';
     function showResult(o){
-      if(o.err){ result.innerHTML='<div class="ask-warn">'+esc(o.err)+'</div>'; return; }
-      var w=''; if(o.warnings&&o.warnings.length){ w='<div class="ask-warn">⚠ '+o.warnings.map(esc).join('<br>')+'</div>'; }
-      var ans='<div class="ask-answer"><div class="aa-label">Answer</div>'+esc(answerLine(o.rows))+'</div>';
+      if(o.err){ result.replaceChildren(el('div','ask-warn',o.err)); return; }
+      var frag=document.createDocumentFragment();
+      var ans=el('div','ask-answer'); ans.appendChild(el('div','aa-label','Answer'));
+      ans.appendChild(document.createTextNode(answerLine(o.rows)));
+      frag.appendChild(ans);
+      if(o.warnings&&o.warnings.length){
+        var w=el('div','ask-warn');
+        o.warnings.forEach(function(warning,i){
+          if(i===0) w.appendChild(document.createTextNode('⚠ '));
+          else w.appendChild(document.createElement('br'));
+          w.appendChild(document.createTextNode(warning));
+        });
+        frag.appendChild(w);
+      }
       // The FinOps-assistant (LLM narration) layer is opt-in: a button, so the
       // first response is fast and the extra model call only fires on request.
-      var assist='';
+      var ab=null;
       if(aiOn && o.rows && o.rows.length){
-        assist='<div class="ask-assist-slot"></div>'+
-          '<button class="ask-assist-btn" type="button">✦ Interpret &amp; recommend</button>';
+        frag.appendChild(el('div','ask-assist-slot'));
+        ab=el('button','ask-assist-btn','✦ Interpret & recommend'); ab.type='button';
+        frag.appendChild(ab);
       }
-      result.innerHTML=ans+w+assist+
-        '<details class="ask-evidence"><summary>How this was answered · SQL + '+ (o.rows?o.rows.length:0) +' row'+((o.rows&&o.rows.length===1)?'':'s')+'</summary>'+
-        '<pre class="sql-block">'+esc(o.sql)+'</pre>'+rows2html(o.rows)+'</details>';
-      var ab=result.querySelector('.ask-assist-btn');
+      var n=o.rows?o.rows.length:0;
+      var details=el('details','ask-evidence');
+      details.appendChild(el('summary',null,'How this was answered · SQL + '+n+' row'+(n===1?'':'s')));
+      details.appendChild(el('pre','sql-block',o.sql));
+      details.appendChild(rows2table(o.rows));
+      frag.appendChild(details);
+      result.replaceChildren(frag);
       if(ab){ ab.addEventListener('click', function(){ runNarrate(o.rows, ab); }); }
     }
     async function runNarrate(rows, btn){
@@ -395,11 +428,16 @@
       var res=await postJSON('/ai/narrate', {question:lastQuestion, rows:rows});
       var text=res.ok && res.data ? res.data.narrative : null;
       if(text){
-        slot.innerHTML='<div class="ask-assist"><div class="aa-label">FinOps assistant</div>'+esc(text).replace(/\n/g,'<br>')+
-          '<div class="ask-assist-foot">Generated from the rows above · synthetic data · verify against the figures</div></div>';
+        var box=el('div','ask-assist'); box.appendChild(el('div','aa-label','FinOps assistant'));
+        String(text).split('\n').forEach(function(line,i){
+          if(i>0) box.appendChild(document.createElement('br'));
+          box.appendChild(document.createTextNode(line));
+        });
+        box.appendChild(el('div','ask-assist-foot','Generated from the rows above · synthetic data · verify against the figures'));
+        slot.replaceChildren(box);
         btn.remove();
       } else {
-        slot.innerHTML='<div class="ask-note">Assistant unavailable — the answer above stands on its own.</div>';
+        slot.replaceChildren(el('div','ask-note','Assistant unavailable — the answer above stands on its own.'));
         btn.disabled=false; btn.textContent='✦ Interpret & recommend';
       }
     }
@@ -409,39 +447,60 @@
       try{
         var r=await fetch('/ai/status'); var s=await r.json();
         aiOn=s.bedrock_enabled;
-        stateEl.innerHTML = aiOn ? '<span class="on">● on</span> · '+esc(s.model) : '<span class="off">● off</span> · canned only';
-        if(!aiOn){ input.disabled=true; send.disabled=true; freeNote.innerHTML='<span style="color:var(--accent-deep)">· disabled this session</span>'; }
+        if(aiOn){
+          var on=el('span','on','● on');
+          stateEl.replaceChildren(on, document.createTextNode(' · '+s.model));
+        } else {
+          var off=el('span','off','● off');
+          stateEl.replaceChildren(off, document.createTextNode(' · canned only'));
+        }
+        if(!aiOn){
+          input.disabled=true; send.disabled=true;
+          var note=el('span',null,'· disabled this session'); note.style.color='var(--accent-deep)';
+          freeNote.replaceChildren(note);
+        }
         var qs=s.canned_queries||[];
-        chips.innerHTML = qs.length ? '' : '<span class="ask-note">No canned queries registered.</span>';
+        if(qs.length) chips.replaceChildren();
+        else chips.replaceChildren(el('span','ask-note','No canned queries registered.'));
         qs.forEach(function(q){
-          var b=document.createElement('button'); b.className='ask-chip';
-          b.innerHTML='<span class="qn">▸</span> '+esc(q.description||q.name);
+          var b=el('button','ask-chip');
+          b.appendChild(el('span','qn','▸'));
+          b.appendChild(document.createTextNode(' '+(q.description||q.name)));
           b.addEventListener('click', function(){ runCanned(q); });
           chips.appendChild(b);
         });
-      }catch(e){ stateEl.textContent='status unavailable'; chips.innerHTML='<span class="ask-note">Could not reach /ai/status.</span>'; }
+      }catch(e){
+        stateEl.textContent='status unavailable';
+        chips.replaceChildren(el('span','ask-note','Could not reach /ai/status.'));
+      }
     }
 
     function runCanned(q){
       // No params → run immediately. Params → show inline inputs, not prompt().
       if(!q.params || !q.params.length){ return execCanned(q, {}); }
       var hint={cpu_max_pct:'e.g. 25', min_cost:'e.g. 30', n:'e.g. 5'};
-      var fields=q.params.map(function(k){
-        return '<label for="pp-'+k+'">'+esc(k)+'</label><input id="pp-'+k+'" placeholder="'+(hint[k]||'')+'" autocomplete="off">';
-      }).join('');
-      result.innerHTML='<div class="ask-params"><div class="pp-title">'+esc(q.description||q.name)+'</div>'+fields+
-        '<div class="pp-actions"><button class="pp-run">Run query</button><button class="pp-cancel">Cancel</button></div></div>';
-      var box=result.querySelector('.ask-params');
-      box.querySelector('.pp-run').addEventListener('click', function(){
-        var params={}; q.params.forEach(function(k){ params[k]=box.querySelector('#pp-'+k).value.trim(); });
+      var box=el('div','ask-params');
+      box.appendChild(el('div','pp-title',q.description||q.name));
+      var inputs={};
+      q.params.forEach(function(k){
+        var lab=el('label',null,k); lab.htmlFor='pp-'+k;
+        var inp=el('input'); inp.id='pp-'+k; inp.placeholder=hint[k]||''; inp.autocomplete='off';
+        inputs[k]=inp; box.appendChild(lab); box.appendChild(inp);
+      });
+      var actions=el('div','pp-actions');
+      var run=el('button','pp-run','Run query'), cancel=el('button','pp-cancel','Cancel');
+      actions.appendChild(run); actions.appendChild(cancel); box.appendChild(actions);
+      result.replaceChildren(box);
+      run.addEventListener('click', function(){
+        var params={}; q.params.forEach(function(k){ params[k]=inputs[k].value.trim(); });
         execCanned(q, params);
       });
-      box.querySelector('.pp-cancel').addEventListener('click', function(){ result.innerHTML=''; });
+      cancel.addEventListener('click', function(){ result.replaceChildren(); });
       var first=box.querySelector('input'); if(first) first.focus();
     }
     async function execCanned(q, params){
       lastQuestion=q.description||q.name;
-      result.innerHTML='<p class="ask-note">Running '+esc(q.description||q.name)+'…</p>';
+      result.replaceChildren(el('p','ask-note','Running '+(q.description||q.name)+'…'));
       var res=await postJSON('/ai/canned',{name:q.name,params:params});
       if(!res.ok) return showResult({err:friendlyError(res.status, res.data)});
       showResult({sql:res.data.sql, rows:res.data.rows});
@@ -451,7 +510,7 @@
       var question=input.value.trim(); if(!question) return;
       lastQuestion=question;
       send.disabled=true; send.textContent='Asking…'; send.setAttribute('aria-busy','true');
-      result.innerHTML='<p class="ask-note">Thinking…</p>';
+      result.replaceChildren(el('p','ask-note','Thinking…'));
       var res=await postJSON('/ai/ask',{question:question});
       send.disabled=!aiOn ? true : false; send.textContent='Ask'; send.removeAttribute('aria-busy');
       if(!res.ok) return showResult({err:friendlyError(res.status, res.data)});

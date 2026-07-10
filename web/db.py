@@ -61,16 +61,24 @@ def query(sql: str | pgsql.Composed, params: tuple | dict | None = None) -> list
 def query_untrusted(sql: str, timeout_ms: int = 5000) -> list[dict]:
     """Run SQL that did NOT originate in this codebase (the AI NL-query path).
 
-    The sql_guard AST allowlist is the first gate, but any validator over
-    model-generated SQL is best-effort — so this path adds DATABASE-level
-    enforcement the guard cannot be talked out of:
-      - READ ONLY transaction: Postgres itself rejects any write/DDL that
-        slipped past the guard (SET TRANSACTION READ ONLY precedes the query
-        inside the same implicit transaction).
-      - statement_timeout: caps a pathological query so it can't be a DoS.
-    Production posture (EBA): run this through a dedicated DB role with
+    SECURITY BOUNDARY — do not weaken any layer; all are load-bearing:
+      1. AST allowlist (ai.sql_guard) — enforced HERE, unconditionally, not
+         delegated to callers: single-statement, SELECT-only, four-table
+         allowlist, forbidden-node walk. There is no code path that executes
+         model SQL without it. It raises SqlValidationError on reject.
+      2. READ ONLY transaction — Postgres itself rejects any write/DDL that a
+         guard bypass might let through (validators over model output are
+         best-effort by construction; the DB gate is not).
+      3. statement_timeout — caps a pathological query so it can't be a DoS.
+    Prefer the canned, parameterized tier (ai/canned.py) wherever it can
+    express the need — this free-text path is the opt-in risk add-on.
+    Production posture (EBA): additionally use a dedicated DB role with
     SELECT-only grants on the four FinOps tables — see GOTCHAS SEC-5.
     """
+    # Late import: keeps web usable without the optional ai/ package installed
+    # elsewhere, while making the guard unconditional on THIS path.
+    from ai import sql_guard
+    sql_guard.validate(sql)  # raises SqlValidationError on reject
     with get_conn() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SET TRANSACTION READ ONLY")
         cur.execute("SET LOCAL statement_timeout = %s", (timeout_ms,))

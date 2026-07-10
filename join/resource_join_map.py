@@ -108,7 +108,18 @@ def build(
         import json as _json
         snapshot = os.environ.get("MIQ_VMS_JSON")
         if snapshot:
-            with open(snapshot) as f:
+            # Env-supplied path: confine to the repo's out/ tree before open()
+            # (path-traversal guard — an env var is config, but config can be
+            # attacker-influenced in a copied deployment; SEC-11). realpath
+            # resolves symlinks/.. so a crafted value can't escape the tree.
+            out_dir = os.path.realpath(
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "out"))
+            resolved = os.path.realpath(snapshot)
+            if not resolved.startswith(out_dir + os.sep):
+                raise ValueError(
+                    f"MIQ_VMS_JSON must point inside {out_dir!r} (got {snapshot!r}) — "
+                    "refusing to read files outside the pipeline's output tree.")
+            with open(resolved) as f:
                 miq_vms = _json.load(f)
         else:
             miq_vms = miq_client.get_vms()

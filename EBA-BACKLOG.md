@@ -58,8 +58,8 @@ entries; read those before estimating.
 - **GOTCHAS:** J-1, J-2, J-3, J-6.
 
 ### B-3. Configure the ManageIQ providers and **run a refresh**
-- **Done when:** AWS provider has valid creds (rotate `admin:smartvm`
-  first &mdash; G-1) and `/api/providers/:id` `refresh` returns
+- **Done when:** AWS provider has valid creds (rotate the vendor-default
+  admin credential first &mdash; G-1) and `/api/providers/:id` `refresh` returns
   `success: true`. Azure + OCI providers are decided per B-0.5.
 - **Reason:** Adding a provider is not the same as refreshing one (G-4).
   Refresh is **async** &mdash; poll `/api/tasks/:id`. Don't assume

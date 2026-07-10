@@ -190,8 +190,8 @@ framework. New components the EBA team builds:
   transit everywhere, including the MIQ collector's private link
   (certificate verification always on, no bypass — G-6).
 - **Secrets:** ManageIQ token + Aurora credentials in AWS Secrets Manager with
-  rotation. Never in env files committed to git. The default `admin:smartvm`
-  must be rotated (G-1).
+  rotation. Never in env files committed to git. The vendor-default ManageIQ
+  admin credential must be rotated (G-1).
 - **Network:** platform in private subnets. ManageIQ reached over
   Direct Connect / VPN / PrivateLink, not the public internet. Web tier
   private, AnyBank-IdP-gated, WAF in front.
