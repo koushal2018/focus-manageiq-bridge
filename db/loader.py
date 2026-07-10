@@ -297,21 +297,25 @@ class LoadConformanceError(Exception):
     so the TRUNCATE rolls back and the existing warehouse survives."""
 
 
+def _count_null_query(col: str):
+    """Build `SELECT COUNT(*) FROM focus_costs WHERE <col> IS NULL` safely.
+
+    `col` is a spec-derived constant, but it's still a dynamic IDENTIFIER —
+    identifiers cannot be bind parameters, so the one safe construction is
+    psycopg2.sql composition with a quoted Identifier (SEC-6/SEC-8). No user
+    input reaches this; no string concatenation occurs.
+    """
+    from psycopg2 import sql as pgsql
+    return pgsql.SQL("SELECT COUNT(*) FROM focus_costs WHERE {} IS NULL").format(
+        pgsql.Identifier(col))
+
+
 def _assert_conformant_in_txn(cur) -> None:
     """Run the conformance rules against the just-COPYed (uncommitted) rows.
     Any failure raises LoadConformanceError → caller rolls back."""
     problems: list[str] = []
-    # `col` is a spec-derived constant, but it's still a dynamic identifier —
-    # compose with pgsql.Identifier (quoted) rather than f-string interpolation.
-    from psycopg2 import sql as pgsql
     for col in _LOAD_MANDATORY_NONNULL:
-        # Compose the identifier separately from execute(): psycopg2.sql with a
-        # quoted Identifier is the safe pattern (identifiers cannot be bind
-        # params), and keeping .format() out of the execute() call also keeps
-        # string-concat scanners from misreading it as raw formatting (SEC-8).
-        q = pgsql.SQL("SELECT COUNT(*) FROM focus_costs WHERE {} IS NULL").format(
-            pgsql.Identifier(col))
-        cur.execute(q)
+        cur.execute(_count_null_query(col))
         n = cur.fetchone()[0]
         if n:
             problems.append(f"{n} row(s) with NULL {col}")

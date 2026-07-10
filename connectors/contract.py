@@ -1,7 +1,7 @@
 """The SourceAdapter contract every connector implements.
 
 A source adapter knows how to: discover new exports for a registered source,
-fetch their raw rows (TLS-verified — never verify=False, G-6), normalize to
+fetch their raw rows (always TLS-verified, G-6), normalize to
 FOCUS v1.3, and report conformance. The dispatcher calls these in order and
 never needs to know which provider it's dealing with.
 """

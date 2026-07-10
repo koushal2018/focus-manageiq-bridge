@@ -15,7 +15,7 @@
 - FOCUS `ServiceCategory` is a closed, case-sensitive set (`normalizer/focus_spec.SERVICE_CATEGORIES_V1_3`). Non-conformant rows are reported and dropped, never invented.
 - All generator output is deterministic (seed `RNG_SEED=20260625`) so tests assert exact counts. Parameterized by `FOCUS_GEN_DAYS` (exists) and new `FOCUS_GEN_SCALE`.
 - Honesty discipline: no control may look live when it isn't. Stubbed API-pull sources must render visibly disabled with a "later release" label.
-- No `verify=False`, no disabling TLS anywhere.
+- Certificate verification never disabled, no disabling TLS anywhere.
 - Secrets only via env / Secrets Manager reference strings — never inline, never committed (the `secret-guard.sh` hook blocks on hit).
 - Do not edit `SPEC.md`. Commit on the current feature branch; do not push without the user asking.
 - Capture non-obvious findings in `GOTCHAS.md` as you go — it is the primary deliverable.

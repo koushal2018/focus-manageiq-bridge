@@ -10,7 +10,7 @@ inherited silently by copy-pasted code.
 Per GOTCHA G-6: we trust the appliance cert by setting REQUESTS_CA_BUNDLE
 to an exported PEM. The exact export command is documented in GOTCHAS.md
 G-6. If MIQ_CA_BUNDLE is unset and MIQ_URL is HTTPS, this client raises
-loudly --- it will NOT silently set verify=False.
+loudly --- it will NOT silently disable certificate verification.
 """
 from __future__ import annotations
 
@@ -78,8 +78,8 @@ def get_vms(
     ca_bundle = ca_bundle or os.environ.get("MIQ_CA_BUNDLE")
 
     if url.startswith("https://") and not ca_bundle:
-        # GOTCHA G-6: fail loud. We do NOT provide a `verify=False` escape
-        # hatch --- not even for the local synthetic appliance --- because
+        # GOTCHA G-6: fail loud. There is NO escape hatch to skip certificate
+        # verification --- not even for the local synthetic appliance --- because
         # the habit of disabling TLS verification travels into production
         # code by copy-paste. The right local workaround is to export and
         # trust the appliance's self-signed cert.
@@ -147,7 +147,7 @@ def get_metric_rollups(
 
     Returns the raw rollup resource dicts (the collector maps them to the
     miq_utilization shape). TLS discipline identical to get_vms (G-6: no
-    verify=False escape hatch)."""
+    escape hatch to skip certificate verification)."""
     url = _require_http_url(url or os.environ.get("MIQ_URL", "https://localhost/api"))
     user = user or os.environ.get("MIQ_USER", "admin")
     password = _require_password(password)
@@ -157,7 +157,7 @@ def get_metric_rollups(
         raise MIQAuthError(
             "MIQ_CA_BUNDLE not set — refusing to fetch metrics over HTTPS without "
             "a trusted CA bundle (G-6). Export the appliance cert and set "
-            "MIQ_CA_BUNDLE; this client never sets verify=False.")
+            "MIQ_CA_BUNDLE; this client never disables certificate verification.")
     context = ssl.create_default_context(cafile=ca_bundle) if ca_bundle else None
 
     endpoint = (url.rstrip("/") + f"/vms/{vm_id}/metric_rollups"

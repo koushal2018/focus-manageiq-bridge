@@ -187,8 +187,8 @@ framework. New components the EBA team builds:
   AI layer's residency must be explicitly accepted by legal or the AI layer
   stays off in production (it's optional by design).
 - **Encryption:** KMS (customer-managed keys) at rest on Aurora + S3; TLS in
-  transit everywhere, including the MIQ collector's private link (no
-  `verify=False`, ever — G-6).
+  transit everywhere, including the MIQ collector's private link
+  (certificate verification always on, no bypass — G-6).
 - **Secrets:** ManageIQ token + Aurora credentials in AWS Secrets Manager with
   rotation. Never in env files committed to git. The default `admin:smartvm`
   must be rotated (G-1).

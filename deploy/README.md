@@ -54,7 +54,7 @@ deploy/
      destructive console (CX-6), defence-in-depth behind the Route.
    - `miq.url` + a `finops-miq` Secret — switch the seed/dispatch from the
      synthesized snapshot to the LIVE ManageIQ collector (MIQ-1); CA via
-     `miq.caBundlePath` (G-6, never verify=False).
+     `miq.caBundlePath` (G-6, certificate verification always on).
    - `metrics.enabled` — Prometheus scrape annotations on the pod (OBS-1);
      `/metrics` is cluster-internal + unauthenticated by design.
 7. **SSO + Route** — wire the OpenShift Route to AnyBank's IdP (OAuth proxy or
@@ -63,7 +63,7 @@ deploy/
 
 ## Non-negotiables carried from the PoC
 
-- **No `verify=False`** anywhere (G-6). TLS to RDS uses the RDS CA bundle.
+- **Certificate verification is never disabled** anywhere (G-6). TLS to RDS uses the RDS CA bundle.
 - **Secrets via Secrets Manager**, never baked into images or manifests
   (G-1). `PGPASSWORD` is injected at runtime from a mounted secret.
 - **`FOCUS_PG_MODE=network`** in the cluster (P-6) — the same loader code as

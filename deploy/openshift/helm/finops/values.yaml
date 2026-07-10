@@ -60,7 +60,7 @@ miq:
   secretName: "finops-miq"
   userKey: "user"
   passKey: "pass"
-  caBundlePath: ""        # path to a mounted CA PEM (G-6; never verify=False)
+  caBundlePath: ""        # path to a mounted CA PEM (G-6; verification always on)
 
 # Prometheus scrape (OBS-1). /metrics is unauthenticated but cluster-internal.
 metrics:

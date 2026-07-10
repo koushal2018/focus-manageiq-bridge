@@ -67,11 +67,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- /* Live ManageIQ collector (MIQ-1). Set miq.url to switch the seed/dispatch
        from the synthesized snapshot to live collection; creds + CA from a
-       Secret (G-1/G-6 — never verify=False, never inline creds). */}}
+       Secret (G-1/G-6 — cert verification always on, never inline creds). */}}
 {{- with .Values.miq }}
 {{- if .url }}
 {{- if and (hasPrefix "https://" .url) (not .caBundlePath) }}
-{{- fail "miq.url is HTTPS but miq.caBundlePath is empty — the collector refuses HTTPS without a trusted CA bundle (G-6, no verify=False). Set miq.caBundlePath to a mounted CA PEM." }}
+{{- fail "miq.url is HTTPS but miq.caBundlePath is empty — the collector refuses HTTPS without a trusted CA bundle (G-6, verification cannot be disabled). Set miq.caBundlePath to a mounted CA PEM." }}
 {{- end }}
 - name: MIQ_URL
   value: {{ .url | quote }}
